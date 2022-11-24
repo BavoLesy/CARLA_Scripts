@@ -24,7 +24,7 @@ import re
 import sys
 import weakref
 
-from basic_agent import BasicAgent
+from CARLA_utils.basic_agent import BasicAgent
 
 try:
     import pygame
