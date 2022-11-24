@@ -13,8 +13,8 @@ import carla
 from enum import Enum
 from shapely.geometry import Polygon
 
-from agents.navigation.local_planner import LocalPlanner
-from agents.navigation.global_route_planner import GlobalRoutePlanner
+from local_planner import LocalPlanner
+from global_route_planner import GlobalRoutePlanner
 from misc import get_speed, is_within_distance, get_trafficlight_trigger_location, compute_distance
 
 
