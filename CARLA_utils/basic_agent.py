@@ -12,10 +12,9 @@ It can also make use of the global route planner to follow a specifed route
 import carla
 from enum import Enum
 from shapely.geometry import Polygon
-
-from local_planner import LocalPlanner
-from global_route_planner import GlobalRoutePlanner
-from misc import get_speed, is_within_distance, get_trafficlight_trigger_location, compute_distance
+from CARLA_utils.local_planner import LocalPlanner
+from CARLA_utils.misc import get_speed, is_within_distance, get_trafficlight_trigger_location, compute_distance
+from CARLA_utils.global_route_planner import GlobalRoutePlanner
 
 
 class BasicAgent(object):
