@@ -769,8 +769,8 @@ def game_loop(args):
         all_id = []
         vehicles_list = []
         walkers_list = []
-        blueprints = get_actor_blueprints(world, "vehicle.*", "All")
-        blueprintsWalkers = get_actor_blueprints(world, "walker.pedestrian.*", "2")
+        blueprints = get_actor_blueprints(sim_world, "vehicle.*", "All")
+        blueprintsWalkers = get_actor_blueprints(sim_world, "walker.pedestrian.*", "2")
         """   
         if args.safe:
             blueprints = [x for x in blueprints if int(x.get_attribute('number_of_wheels')) == 4]
@@ -784,7 +784,7 @@ def game_loop(args):
         """
         blueprints = sorted(blueprints, key=lambda bp: bp.id)
 
-        spawn_points = world.get_map().get_spawn_points()
+        spawn_points = sim_world.get_map().get_spawn_points()
         number_of_spawn_points = len(spawn_points)
         number_of_vehicles = 20
         if number_of_vehicles < number_of_spawn_points:
@@ -845,14 +845,14 @@ def game_loop(args):
         percentagePedestriansCrossing = 0.0  # how many pedestrians will walk through the road
         seedw = 0  # seed for the random walk
         if seedw:
-            world.set_pedestrians_seed(seedw)
+            sim_world.set_pedestrians_seed(seedw)
             random.seed(seedw)
         # 1. take all the random locations to spawn
         number_of_walkers = 20
         spawn_points = []
         for i in range(number_of_walkers):
             spawn_point = carla.Transform()
-            loc = world.get_random_location_from_navigation()
+            loc = sim_world.get_random_location_from_navigation()
             if (loc != None):
                 spawn_point.location = loc
                 spawn_points.append(spawn_point)
@@ -887,7 +887,7 @@ def game_loop(args):
         walker_speed = walker_speed2
         # 3. we spawn the walker controller
         batch = []
-        walker_controller_bp = world.get_blueprint_library().find('controller.ai.walker')
+        walker_controller_bp = sim_world.get_blueprint_library().find('controller.ai.walker')
         for i in range(len(walkers_list)):
             batch.append(SpawnActor(walker_controller_bp, carla.Transform(), walkers_list[i]["id"]))
         results = client.apply_batch_sync(batch, True)
@@ -900,17 +900,17 @@ def game_loop(args):
         for i in range(len(walkers_list)):
             all_id.append(walkers_list[i]["con"])
             all_id.append(walkers_list[i]["id"])
-        all_actors = world.get_actors(all_id)
+        all_actors = sim_world.get_actors(all_id)
 
         # wait for a tick to ensure client receives the last transform of the walkers we have just created
         if not synchronous_master:
-            world.wait_for_tick()
+            sim_world.wait_for_tick()
         else:
-            world.tick()
+            sim_world.tick()
 
         # 5. initialize each controller and set target to walk to (list is [controler, actor, controller, actor ...])
         # set how many pedestrians can cross the road
-        world.set_pedestrians_cross_factor(percentagePedestriansCrossing)
+        sim_world.set_pedestrians_cross_factor(percentagePedestriansCrossing)
         for i in range(0, len(all_id), 2):
             # start walker
             all_actors[i].start()
