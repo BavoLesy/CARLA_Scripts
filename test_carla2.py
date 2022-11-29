@@ -770,12 +770,10 @@ def game_loop(args):
         spawn_points = sim_world.get_map().get_spawn_points()
         number_of_spawn_points = len(spawn_points)
 
-        SpawnActor = carla.command.SpawnActor
-        SetAutopilot = carla.command.SetAutopilot
-        FutureActor = carla.command.FutureActor
+
 
         number_of_vehicles = 10
-        batch = []
+
         for n, transform in enumerate(sim_world.get_map().get_spawn_points()):
             if n >= number_of_vehicles:
                 break
@@ -784,17 +782,13 @@ def game_loop(args):
                 color = random.choice(blueprint.get_attribute('color').recommended_values)
                 blueprint.set_attribute('color', color)
             blueprint.set_attribute('role_name', 'autopilot')
-            batch.append(SpawnActor(blueprint, transform).then(SetAutopilot(FutureActor, True)))
-        # Apply batch sync
-        for response in client.apply_batch_sync(batch):
-            if response.error:
-                logging.error(response.error)
-            else:
-                sim_world.actor_list.append(response.actor_id)
+            # Spawn the car
+            sim_world.spawn_actor(blueprint, n)
 
-        # Spawn 10 random walkers
-        batch = []
-        walker_speed = []
+
+
+
+
 
 
 
