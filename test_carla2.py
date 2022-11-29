@@ -756,7 +756,7 @@ def game_loop(args):
             spawn_points.remove(spawn_point)
             vehicle = world.world.spawn_actor(blueprint, spawn_point)
             vehicle.set_autopilot(True)
-            world.actors.append(vehicle)
+            world.world.actors.append(vehicle)
 
         # Spawn walkers
         spawn_points = []
