@@ -744,7 +744,7 @@ def game_loop(args):
         number_of_walkers = 15
 
         blueprints = sim_world.get_blueprint_library().filter('vehicle.*')
-        blueprintsWalkers = sim_world.get_blueprint_library.filter('walker.pedestrian.*')
+        blueprintsWalkers = sim_world.get_blueprint_library().filter('walker.pedestrian.*')
 
         spawn_points = world.world.get_map().get_spawn_points()
 
