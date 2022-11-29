@@ -109,7 +109,7 @@ def game_loop(args):
             sim_world.apply_settings(settings)
             traffic_manager.set_synchronous_mode(True)
 
-            sim_world.destroy()
+            #sim_world.destroy()
 
         pygame.quit()
 
