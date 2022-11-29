@@ -738,12 +738,12 @@ def game_loop(args):
         agent.set_destination(destination)
 
         clock = pygame.time.Clock()
-
+        """
         # Generate traffic 20 vehicles and 15 walkers
         number_of_vehicles = 20
         number_of_walkers = 15
 
-        blueprints = world.get_blueprint_library().filter('vehicle.*')
+        blueprints = world.get_blueprint_library()
         blueprintsWalkers = world.get_blueprint_library(world.world, 'walker.pedestrian.*', '2')
 
         spawn_points = world.world.get_map().get_spawn_points()
@@ -795,7 +795,7 @@ def game_loop(args):
             world.actors.append(walker)
             world.actors.append(walker_controller)
 
-
+        """
 
         while True:
             clock.tick()
