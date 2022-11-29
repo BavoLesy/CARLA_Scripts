@@ -785,12 +785,7 @@ def game_loop(args):
                 blueprint.set_attribute('color', color)
             blueprint.set_attribute('role_name', 'autopilot')
             batch.append(SpawnActor(blueprint, transform).then(SetAutopilot(FutureActor, True)))
-        # Apply batch sync
-        for response in client.apply_batch_sync(batch):
-            if response.error:
-                logging.error(response.error)
-            else:
-                sim_world.actor_list.append(response.actor_id)
+
 
         # Spawn 10 random walkers
         batch = []
