@@ -790,7 +790,7 @@ def game_loop(args):
             if response.error:
                 logging.error(response.error)
             else:
-                world.actor_list.append(response.actor_id)
+                sim_world.actor_list.append(response.actor_id)
 
         # Spawn 10 random walkers
         batch = []
