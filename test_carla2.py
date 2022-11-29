@@ -749,11 +749,8 @@ def game_loop(args):
         spawn_points = world.world.get_map().get_spawn_points()
 
         # Spawn vehicles
-        for n in range(0,number_of_vehicles):
+        for n in range(0, number_of_vehicles):
             blueprint = random.choice(blueprints)
-            if blueprint.has_attribute('color'):
-                color = random.choice(blueprints).get_attribute('color').recommended_values
-                blueprint.set_attribute('color', color)
             blueprint.set_attribute('role_name', 'autopilot')
             spawn_point = random.choice(spawn_points)
             spawn_points.remove(spawn_point)
