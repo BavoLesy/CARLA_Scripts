@@ -25,6 +25,7 @@ import sys
 import weakref
 
 from CARLA_utils.basic_agent import BasicAgent
+from carla import *
 
 try:
     import pygame
@@ -581,6 +582,8 @@ class CameraManager(object):
         self.recording = False
         bound_y = 0.5 + self._parent.bounding_box.extent.y
         attachment = carla.AttachmentType
+        # Add our own cameras
+
         self._camera_transforms = [
             (carla.Transform(
                 carla.Location(x=-5.5, z=2.5), carla.Rotation(pitch=8.0)), attachment.SpringArm),
@@ -736,6 +739,64 @@ def game_loop(args):
 
         clock = pygame.time.Clock()
 
+        # Generate traffic 20 vehicles and 15 walkers
+        number_of_vehicles = 20
+        number_of_walkers = 15
+
+        blueprints = world.get_blueprint_library().filter('vehicle.*')
+        blueprintsWalkers = world.get_blueprint_library(world.world, 'walker.pedestrian.*', '2')
+
+        spawn_points = world.world.get_map().get_spawn_points()
+
+        SpawnActor = carla.command.SpawnActor
+        SetAutopilot = carla.command.SetAutopilot
+        SetVehicleLightState = carla.command.SetVehicleLightState
+        FutureActor = carla.command.FutureActor
+        # Spawn vehicles
+        for n in range(0,number_of_vehicles):
+            blueprint = random.choice(blueprints)
+            if blueprint.has_attribute('color'):
+                color = random.choice(blueprints).get_attribute('color').recommended_values
+                blueprint.set_attribute('color', color)
+            blueprint.set_attribute('role_name', 'autopilot')
+            spawn_point = random.choice(spawn_points)
+            spawn_points.remove(spawn_point)
+            vehicle = world.world.spawn_actor(blueprint, spawn_point)
+            vehicle.set_autopilot(True)
+            world.actors.append(vehicle)
+
+        # Spawn walkers
+        spawn_points = []
+        for i in range(number_of_walkers):
+            spawn_point = carla.Transform()
+            loc = world.map.get_spawn_points()[i].location
+            spawn_point.location = loc
+            spawn_points.append(spawn_point)
+
+        for spawn_point in spawn_points:
+            walker_bp = random.choice(blueprintsWalkers)
+            # set as not invincible
+            if walker_bp.has_attribute('is_invincible'):
+                walker_bp.set_attribute('is_invincible', 'false')
+            # set the max speed
+            if walker_bp.has_attribute('speed'):
+                if (random.random() > 0.5):
+                    walker_bp.set_attribute('speed', '0.8')
+                else:
+                    walker_bp.set_attribute('speed', '1.4')
+            # spawn the walker
+            walker = world.world.spawn_actor(walker_bp, spawn_point)
+            # spawn a walker controller
+            walker_controller = world.world.spawn_actor(walker_bp, spawn_point)
+            # attach a walker controller to the walker
+            walker.start()
+            walker_controller.start()
+            # add walker and controller to list of actors
+            world.actors.append(walker)
+            world.actors.append(walker_controller)
+
+
+
         while True:
             clock.tick()
             if args.sync:
@@ -783,7 +844,6 @@ def game_loop(args):
 
 def main():
     """Main method"""
-
     argparser = argparse.ArgumentParser(
         description='CARLA Testing Sensors data Client')
     argparser.add_argument(
@@ -825,7 +885,7 @@ def main():
         "-a", "--agent", type=str,
         choices=["Behavior", "Basic"],
         help="select which agent to run",
-        default="Behavior")
+        default="Basic")
     argparser.add_argument(
         '-b', '--behavior', type=str,
         choices=["cautious", "normal", "aggressive"],
