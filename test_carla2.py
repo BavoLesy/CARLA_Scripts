@@ -769,9 +769,9 @@ def game_loop(args):
         all_id = []
         vehicles_list = []
         walkers_list = []
-        blueprints = get_actor_blueprints(world, args.filterv, args.generationv)
-        blueprintsWalkers = get_actor_blueprints(world, args.filterw, args.generationw)
-
+        blueprints = get_actor_blueprints(world, "vehicle.*", "All")
+        blueprintsWalkers = get_actor_blueprints(world, "walker.pedestrian.*", "2")
+        """   
         if args.safe:
             blueprints = [x for x in blueprints if int(x.get_attribute('number_of_wheels')) == 4]
             blueprints = [x for x in blueprints if not x.id.endswith('microlino')]
@@ -781,18 +781,18 @@ def game_loop(args):
             blueprints = [x for x in blueprints if not x.id.endswith('sprinter')]
             blueprints = [x for x in blueprints if not x.id.endswith('firetruck')]
             blueprints = [x for x in blueprints if not x.id.endswith('ambulance')]
-
+        """
         blueprints = sorted(blueprints, key=lambda bp: bp.id)
 
         spawn_points = world.get_map().get_spawn_points()
         number_of_spawn_points = len(spawn_points)
-
-        if args.number_of_vehicles < number_of_spawn_points:
+        number_of_vehicles = 20
+        if number_of_vehicles < number_of_spawn_points:
             random.shuffle(spawn_points)
-        elif args.number_of_vehicles > number_of_spawn_points:
+        elif number_of_vehicles > number_of_spawn_points:
             msg = 'requested %d vehicles, but could only find %d spawn points'
-            logging.warning(msg, args.number_of_vehicles, number_of_spawn_points)
-            args.number_of_vehicles = number_of_spawn_points
+            logging.warning(msg, number_of_vehicles, number_of_spawn_points)
+            number_of_vehicles = number_of_spawn_points
 
 
         SpawnActor = carla.command.SpawnActor
@@ -803,9 +803,9 @@ def game_loop(args):
         # Spawn vehicles
         # --------------
         batch = []
-        hero = args.hero
+        hero = False
         for n, transform in enumerate(spawn_points):
-            if n >= args.number_of_vehicles:
+            if n >= number_of_vehicles:
                 break
             blueprint = random.choice(blueprints)
             if blueprint.has_attribute('color'):
@@ -831,23 +831,26 @@ def game_loop(args):
                 vehicles_list.append(response.actor_id)
 
         # Set automatic vehicle lights update if specified
-        if args.car_lights_on:
+        """
+        if car_lights_on:
             all_vehicle_actors = world.get_actors(vehicles_list)
             for actor in all_vehicle_actors:
                 traffic_manager.update_vehicle_lights(actor, True)
-
+        """
         # -------------
         # Spawn Walkers
         # -------------
         # some settings
         percentagePedestriansRunning = 0.0  # how many pedestrians will run
         percentagePedestriansCrossing = 0.0  # how many pedestrians will walk through the road
-        if args.seedw:
-            world.set_pedestrians_seed(args.seedw)
-            random.seed(args.seedw)
+        seedw = 0  # seed for the random walk
+        if seedw:
+            world.set_pedestrians_seed(seedw)
+            random.seed(seedw)
         # 1. take all the random locations to spawn
+        number_of_walkers = 20
         spawn_points = []
-        for i in range(args.number_of_walkers):
+        for i in range(number_of_walkers):
             spawn_point = carla.Transform()
             loc = world.get_random_location_from_navigation()
             if (loc != None):
@@ -900,7 +903,7 @@ def game_loop(args):
         all_actors = world.get_actors(all_id)
 
         # wait for a tick to ensure client receives the last transform of the walkers we have just created
-        if args.asynch or not synchronous_master:
+        if not synchronous_master:
             world.wait_for_tick()
         else:
             world.tick()
