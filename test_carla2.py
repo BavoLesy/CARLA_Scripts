@@ -736,6 +736,7 @@ def game_loop(args):
         client.set_timeout(4.0)
 
         traffic_manager = client.get_trafficmanager()
+        traffic_manager.set_global_distance_to_leading_vehicle(2.5)
         sim_world = client.get_world()
 
         if args.sync:
@@ -761,6 +762,41 @@ def game_loop(args):
         agent.set_destination(destination)
 
         clock = pygame.time.Clock()
+
+        # Spawn 10 random vehicles that drive around
+        #Spawn actor
+        blueprints = world.world.get_blueprint_library().filter('vehicle.*')
+        blueprints = [x for x in blueprints if int(x.get_attribute('number_of_wheels')) == 4]
+        spawn_points = sim_world.get_map().get_spawn_points()
+        number_of_spawn_points = len(spawn_points)
+
+        SpawnActor = carla.command.SpawnActor
+        SetAutopilot = carla.command.SetAutopilot
+        FutureActor = carla.command.FutureActor
+
+        number_of_vehicles = 10
+        batch = []
+        for n, transform in enumerate(sim_world.get_map().get_spawn_points()):
+            if n >= number_of_vehicles:
+                break
+            blueprint = random.choice(sim_world.get_blueprint_library().filter('vehicle.*'))
+            if blueprint.has_attribute('color'):
+                color = random.choice(blueprint.get_attribute('color').recommended_values)
+                blueprint.set_attribute('color', color)
+            blueprint.set_attribute('role_name', 'autopilot')
+            batch.append(SpawnActor(blueprint, transform).then(SetAutopilot(FutureActor, True)))
+        # Apply batch sync
+        for response in client.apply_batch_sync(batch):
+            if response.error:
+                logging.error(response.error)
+            else:
+                world.actor_list.append(response.actor_id)
+
+        # Spawn 10 random walkers
+        batch = []
+        walker_speed = []
+
+
 
 
         while True:
