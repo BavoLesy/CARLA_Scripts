@@ -171,7 +171,7 @@ def main(town):
 
                     # Initialize the exporter
                     writer = Writer(frame_path + '.png', image_w, image_h)
-
+                    boxes = []
                     for npc in world.get_actors().filter('vehicle*'):
 
                         # Filter out the ego vehicle
@@ -222,9 +222,16 @@ def main(town):
                                     elif name == 'firetruck' or name == 'ambulance' or name == 'sprinter':
                                         classification = 'truck'
                                     print(classification)
-                                    # Add the object to the frame (ensure it is inside the image)
-                                    if x_min > 0 and x_max < image_w and y_min > 0 and y_max < image_h:
-                                            writer.addObject(classification, x_min, y_min, x_max, y_max)
+                                    # not already a bounding box there
+                                    already_there = False
+                                    for box in boxes:
+                                        if box[0] <= x_min and box[1] <= y_min and box[2] >= x_max and box[3] >= y_max:
+                                            already_there = True
+                                    if x_min > 0 and x_max < image_w and y_min > 0 and y_max < image_h and not already_there:
+                                        writer.addObject(classification, x_min, y_min, x_max, y_max)
+                                        boxes.append([x_min, y_min, x_max, y_max])
+
+
 
                     # Save the bounding boxes in the scene
                     writer.save(frame_path + '.xml')
