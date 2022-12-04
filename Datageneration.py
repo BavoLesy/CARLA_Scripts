@@ -221,9 +221,9 @@ def main(town):
                                         print(name)
 
                                         classification = 'vehicle'
-                                        if name == 'crossbike' or name == 'low_rider' or name == 'ninja' or name == 'zx125' or name == 'yzf':
+                                        if name == 'crossbike' or name == 'low_rider' or name == 'ninja' or name == 'zx125' or name == 'yzf' or name == 'omafiets':
                                             classification = 'motorcycle'
-                                        elif name == 'firetruck' or name == 'ambulance' or name == 'sprinter':
+                                        elif name == 'firetruck' or name == 'ambulance' or name == 'sprinter' or name == 'carlacola':
                                             classification = 'truck'
                                         print(classification)
                                         # not already a bounding box there
