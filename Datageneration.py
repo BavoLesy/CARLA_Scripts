@@ -167,7 +167,7 @@ def main(town):
                 if image.frame % 20 == 0:
                     # Save the image -- for export
                     image_path = 'output/camera_output/images/%06d' % image.frame
-                    label_path = 'output/camera_output/labels/%06d' % image.frame
+
                     image.save_to_disk(image_path + '.png')
 
                     # Initialize the exporter
@@ -236,7 +236,7 @@ def main(town):
 
 
                     # Save the bounding boxes in the scene
-                    writer.save(label_path + '.xml')
+                    writer.save(image_path + '.xml')
 
                     cv2.imshow('CARLA RaceAI', img)
 
