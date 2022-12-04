@@ -76,8 +76,8 @@ def main(town):
     # Simulator
     client = carla.Client('localhost', 2000)
     client.set_timeout(10.0)
-    #client.load_world(town)
-    world = client.get_world()
+    world = client.load_world(town)
+    #world = client.get_world()
     blueprint_library = world.get_blueprint_library()
     spawn_points = world.get_map().get_spawn_points()
 
@@ -166,11 +166,12 @@ def main(town):
                 # only take measurements every 20 frames
                 if image.frame % 20 == 0:
                     # Save the image -- for export
-                    frame_path = 'output/camera_output/%06d' % image.frame
-                    image.save_to_disk(frame_path + '.png')
+                    image_path = 'output/camera_output/images/%06d' % image.frame
+                    label_path = 'output/camera_output/labels/%06d' % image.frame
+                    image.save_to_disk(image_path + '.png')
 
                     # Initialize the exporter
-                    writer = Writer(frame_path + '.png', image_w, image_h)
+                    writer = Writer(image_path + '.png', image_w, image_h)
                     boxes = []
                     for npc in world.get_actors().filter('vehicle*'):
 
@@ -181,7 +182,7 @@ def main(town):
                             dist = npc.get_transform().location.distance(vehicle.get_transform().location)
 
                             # Filter for the vehicles within 50m
-                            if dist < 50:
+                            if 0.5 < dist < 50:
                                 forward_vec = vehicle.get_transform().get_forward_vector()
                                 ray = npc.get_transform().location - vehicle.get_transform().location
 
@@ -235,7 +236,7 @@ def main(town):
 
 
                     # Save the bounding boxes in the scene
-                    writer.save(frame_path + '.xml')
+                    writer.save(label_path + '.xml')
 
                     cv2.imshow('CARLA RaceAI', img)
 
