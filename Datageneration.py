@@ -207,29 +207,30 @@ def main(town):
                                         # Find the lowest  vertex
                                         if p[1] < y_min:
                                             y_min = p[1]
-
-                                    cv2.line(img, (int(x_min),int(y_min)), (int(x_max),int(y_min)), (0,0,255, 255), 1)
-                                    cv2.line(img, (int(x_min),int(y_max)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
-                                    cv2.line(img, (int(x_min),int(y_min)), (int(x_min),int(y_max)), (0,0,255, 255), 1)
-                                    cv2.line(img, (int(x_max),int(y_min)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
-                                    # get name of the vehicle
-                                    name = npc.type_id.split('.')[2]
-                                    print(name)
-
-                                    classification = 'vehicle'
-                                    if name == 'crossbike' or name == 'low_rider' or name == 'ninja' or name == 'zx125' or name == 'yzf':
-                                        classification = 'motorcycle'
-                                    elif name == 'firetruck' or name == 'ambulance' or name == 'sprinter':
-                                        classification = 'truck'
-                                    print(classification)
-                                    # not already a bounding box there
                                     already_there = False
                                     for box in boxes:
                                         if box[0] <= x_min and box[1] <= y_min and box[2] >= x_max and box[3] >= y_max:
                                             already_there = True
-                                    if x_min > 0 and x_max < image_w and y_min > 0 and y_max < image_h and not already_there:
-                                        writer.addObject(classification, x_min, y_min, x_max, y_max)
-                                        boxes.append([x_min, y_min, x_max, y_max])
+                                    if not already_there:
+                                        cv2.line(img, (int(x_min),int(y_min)), (int(x_max),int(y_min)), (0,0,255, 255), 1)
+                                        cv2.line(img, (int(x_min),int(y_max)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
+                                        cv2.line(img, (int(x_min),int(y_min)), (int(x_min),int(y_max)), (0,0,255, 255), 1)
+                                        cv2.line(img, (int(x_max),int(y_min)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
+                                        # get name of the vehicle
+                                        name = npc.type_id.split('.')[2]
+                                        print(name)
+
+                                        classification = 'vehicle'
+                                        if name == 'crossbike' or name == 'low_rider' or name == 'ninja' or name == 'zx125' or name == 'yzf':
+                                            classification = 'motorcycle'
+                                        elif name == 'firetruck' or name == 'ambulance' or name == 'sprinter':
+                                            classification = 'truck'
+                                        print(classification)
+                                        # not already a bounding box there
+
+                                        if x_min > 0 and x_max < image_w and y_min > 0 and y_max < image_h:
+                                            writer.addObject(classification, x_min, y_min, x_max, y_max)
+                                            boxes.append([x_min, y_min, x_max, y_max])
 
 
 
