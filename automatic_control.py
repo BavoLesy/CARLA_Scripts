@@ -17,11 +17,14 @@ import glob
 import logging
 import math
 import os
+import queue
+
 import numpy.random as random
 import re
 import sys
 import weakref
-
+from pascal_voc_writer import Writer
+from generate_traffic import generate
 
 try:
     import pygame
@@ -59,7 +62,7 @@ except IndexError:
 import carla
 from carla import ColorConverter as cc
 
-#from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
+# from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
 from CARLA_utils.basic_agent import BasicAgent  # pylint: disable=import-error
 
 
@@ -71,7 +74,9 @@ from CARLA_utils.basic_agent import BasicAgent  # pylint: disable=import-error
 def find_weather_presets():
     """Method to find weather presets"""
     rgx = re.compile('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)')
+
     def name(x): return ' '.join(m.group(0) for m in rgx.finditer(x))
+
     presets = [x for x in dir(carla.WeatherParameters) if re.match('[A-Z].+', x)]
     return [(getattr(carla.WeatherParameters, x), name(x)) for x in presets]
 
@@ -123,7 +128,7 @@ class World(object):
         # Get a random blueprint.
         # get tesla model 3
         blueprint = random.choice(self.world.get_blueprint_library().filter('model3'))
-        #blueprint = random.choice(self.world.get_blueprint_library().filter(self._actor_filter))
+        # blueprint = random.choice(self.world.get_blueprint_library().filter(self._actor_filter))
         blueprint.set_attribute('role_name', 'hero')
         if blueprint.has_attribute('color'):
             color = random.choice(blueprint.get_attribute('color').recommended_values)
@@ -144,9 +149,11 @@ class World(object):
                 print('Please add some Vehicle Spawn Point to your UE4 scene.')
                 sys.exit(1)
             spawn_points = self.map.get_spawn_points()
-            spawn_point = spawn_points[0] if spawn_points else carla.Transform()
+            spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.modify_vehicle_physics(self.player)
+            # Set autopilot
+            self.player.set_autopilot(True)
 
         if self._args.sync:
             self.world.tick()
@@ -154,6 +161,21 @@ class World(object):
             self.world.wait_for_tick()
 
         # Set up the sensors.
+        # --------------
+        # Add a new LIDAR sensor to my ego
+        # --------------
+        lidar_cam = None
+        lidar_bp = self.world.get_blueprint_library().find('sensor.lidar.ray_cast')
+        lidar_bp.set_attribute('channels', str(32))
+        lidar_bp.set_attribute('points_per_second', str(90000))
+        lidar_bp.set_attribute('rotation_frequency', str(40))
+        lidar_bp.set_attribute('range', str(20))
+        lidar_location = carla.Location(0, 0, 2)
+        lidar_rotation = carla.Rotation(0, 0, 0)
+        lidar_transform = carla.Transform(lidar_location, lidar_rotation)
+        lidar_sen = self.world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.player,
+                                           attachment_type=carla.AttachmentType.Rigid)
+
         self.collision_sensor = CollisionSensor(self.player, self.hud)
         self.lane_invasion_sensor = LaneInvasionSensor(self.player, self.hud)
         self.gnss_sensor = GnssSensor(self.player)
@@ -172,7 +194,7 @@ class World(object):
         self.player.get_world().set_weather(preset[0])
 
     def modify_vehicle_physics(self, actor):
-        #If actor is not a vehicle, we cannot use the physics control
+        # If actor is not a vehicle, we cannot use the physics control
         try:
             physics_control = actor.get_physics_control()
             physics_control.use_sweep_wheel_collision = True
@@ -229,6 +251,7 @@ class KeyboardControl(object):
     def _is_quit_shortcut(key):
         """Shortcut for quitting"""
         return (key == K_ESCAPE) or (key == K_q and pygame.key.get_mods() & KMOD_CTRL)
+
 
 # ==============================================================================
 # -- HUD -----------------------------------------------------------------------
@@ -290,7 +313,7 @@ class HUD(object):
             'Map:     % 20s' % world.map.name.split('/')[-1],
             'Simulation time: % 12s' % datetime.timedelta(seconds=int(self.simulation_time)),
             '',
-            'Speed:   % 15.0f km/h' % (3.6 * math.sqrt(vel.x**2 + vel.y**2 + vel.z**2)),
+            'Speed:   % 15.0f km/h' % (3.6 * math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)),
             u'Heading:% 16.0f\N{DEGREE SIGN} % 2s' % (transform.rotation.yaw, heading),
             'Location:% 20s' % ('(% 5.1f, % 5.1f)' % (transform.location.x, transform.location.y)),
             'GNSS:% 24s' % ('(% 2.6f, % 3.6f)' % (world.gnss_sensor.lat, world.gnss_sensor.lon)),
@@ -320,8 +343,9 @@ class HUD(object):
             self._info_text += ['Nearby vehicles:']
 
         def dist(l):
-            return math.sqrt((l.x - transform.location.x)**2 + (l.y - transform.location.y)
-                             ** 2 + (l.z - transform.location.z)**2)
+            return math.sqrt((l.x - transform.location.x) ** 2 + (l.y - transform.location.y)
+                             ** 2 + (l.z - transform.location.z) ** 2)
+
         vehicles = [(dist(x.get_location()), x) for x in vehicles if x.id != world.player.id]
 
         for dist, vehicle in sorted(vehicles):
@@ -382,6 +406,7 @@ class HUD(object):
         self._notifications.render(display)
         self.help.render(display)
 
+
 # ==============================================================================
 # -- FadingText ----------------------------------------------------------------
 # ==============================================================================
@@ -416,6 +441,7 @@ class FadingText(object):
         """Render fading text method"""
         display.blit(self.surface, self.pos)
 
+
 # ==============================================================================
 # -- HelpText ------------------------------------------------------------------
 # ==============================================================================
@@ -447,6 +473,7 @@ class HelpText(object):
         """Render help text method"""
         if self._render:
             display.blit(self.surface, self.pos)
+
 
 # ==============================================================================
 # -- CollisionSensor -----------------------------------------------------------
@@ -491,6 +518,7 @@ class CollisionSensor(object):
         if len(self.history) > 4000:
             self.history.pop(0)
 
+
 # ==============================================================================
 # -- LaneInvasionSensor --------------------------------------------------------
 # ==============================================================================
@@ -521,6 +549,7 @@ class LaneInvasionSensor(object):
         lane_types = set(x.type for x in event.crossed_lane_markings)
         text = ['%r' % str(x).split()[-1] for x in lane_types]
         self.hud.notification('Crossed line %s' % ' and '.join(text))
+
 
 # ==============================================================================
 # -- GnssSensor --------------------------------------------------------
@@ -553,6 +582,7 @@ class GnssSensor(object):
             return
         self.lat = event.latitude
         self.lon = event.longitude
+
 
 # ==============================================================================
 # -- CameraManager -------------------------------------------------------------
@@ -613,7 +643,7 @@ class CameraManager(object):
         """Set a sensor"""
         index = index % len(self.sensors)
         needs_respawn = True if self.index is None else (
-            force_respawn or (self.sensors[index][0] != self.sensors[self.index][0]))
+                force_respawn or (self.sensors[index][0] != self.sensors[self.index][0]))
         if needs_respawn:
             if self.sensor is not None:
                 self.sensor.destroy()
@@ -674,9 +704,65 @@ class CameraManager(object):
         if self.recording:
             image.save_to_disk('_out/%08d' % image.frame)
 
+
 # ==============================================================================
 # -- Game Loop ---------------------------------------------------------
 # ==============================================================================
+
+def generate_traffic(traffic_manager, client, world, blueprint_library, spawn_points):
+    """Generate traffic"""
+    traffic_manager.set_global_distance_to_leading_vehicle(2.5)
+    traffic_manager.set_random_device_seed(0)
+    traffic_manager.set_synchronous_mode(True)
+    traffic_manager.global_percentage_speed_difference(30.0)
+    vehicle_bp = blueprint_library.filter('vehicle.*')
+    spawn_points = spawn_points
+    number_of_spawn_points = len(spawn_points)
+
+    SpawnActor = carla.command.SpawnActor
+    SetAutopilot = carla.command.SetAutopilot
+    FutureActor = carla.command.FutureActor
+    batch = []
+    vehicles_list = []
+
+    for n, transform in enumerate(spawn_points):
+        if n >= 10:
+            break
+        blueprint = random.choice(vehicle_bp)
+        if blueprint.has_attribute('color'):
+            color = random.choice(blueprint.get_attribute('color').recommended_values)
+            blueprint.set_attribute('color', color)
+        blueprint.set_attribute('role_name', 'autopilot')
+        # spawn
+        print("spawned")
+
+        batch.append(SpawnActor(blueprint, transform)
+                     .then(SetAutopilot(FutureActor, True, traffic_manager.get_port())))
+
+    for response in client.apply_batch_sync(batch, False):
+        if response.error:
+            logging.error(response.error)
+        else:
+            vehicles_list.append(response.actor_id)
+    return vehicles_list
+
+
+def build_projection_matrix(fov, w, h):
+    focal = w / (2.0 * np.tan(fov * np.pi / 360.0))
+    K = np.identity(3)
+    K[0, 0] = K[1, 1] = focal
+    K[0, 2] = w / 2.0
+    K[1, 2] = h / 2.0
+    return K
+
+
+def get_image_point(loc, K, w2c):
+    point = np.array([loc.x, loc.y, loc.z, 1.0])
+    point = np.dot(w2c, point)
+    point_img = [point[1], -point[2], point[0]]
+    point_img = np.dot(K, point_img)
+    point_img = point_img / point_img[2]
+    return point_img
 
 
 def game_loop(args):
@@ -688,17 +774,18 @@ def game_loop(args):
     pygame.init()
     pygame.font.init()
     world = None
-    other_vehicles = []
+
     try:
         if args.seed:
             random.seed(args.seed)
 
         client = carla.Client(args.host, args.port)
-        client.set_timeout(6.0)
+        client.set_timeout(10.0)
         # open traffic manager on port 8000
-        traffic_manager = client.get_trafficmanager(8000)
+        traffic_manager = client.get_trafficmanager(args.tm_port)
+        traffic_manager.set_global_distance_to_leading_vehicle(2.5)
         # LOAD WORLD 05
-        #client.load_world('Town05')
+        # client.load_world('Town05')
         sim_world = client.get_world()
 
         if args.sync:
@@ -706,7 +793,6 @@ def game_loop(args):
             settings.synchronous_mode = True
             settings.fixed_delta_seconds = 0.05
             sim_world.apply_settings(settings)
-
             traffic_manager.set_synchronous_mode(True)
 
         display = pygame.display.set_mode(
@@ -716,45 +802,134 @@ def game_loop(args):
         hud = HUD(args.width, args.height)
         world = World(client.get_world(), hud, args)
         controller = KeyboardControl(world)
-        agent = BasicAgent(world.player)
-
+        # agent = BasicAgent(world.player)
 
         # Set the agent destination
         spawn_points = world.map.get_spawn_points()
         destination = random.choice(spawn_points).location
-        agent.set_destination(destination)
+        # agent.set_destination(destination)
 
-        # Spawn other vehicles
-        number_of_spawn_points = len(spawn_points)
-        batch = []
-        for i in range(1, 10):
-            # get random blueprint
-            vehicle_blueprint = random.choice(world.world.get_blueprint_library().filter('vehicle.*'))
-            other_vehicles.append(vehicle_blueprint)
-            # random spawn point
-            #vehicle = client.get_world().spawn_actor(vehicle_blueprint, spawn_points[i])
-            #vehicle.set_autopilot(True, 8000)
-            # Append to list of vehicles
-            #other_vehicles.append(vehicle)
+        # Generate traffic
+        settings = sim_world.get_settings()
+        settings.synchronous_mode = True
+        settings.fixed_delta_seconds = 0.05
+        sim_world.apply_settings(settings)
 
-            #batch.append(carla.command.SpawnActor(vehicle_blueprint, spawn_points[i]).then(carla.command.SetAutopilot(carla.command.FutureActor, True, 8000)))
-        #traffic_manager.global_percentage_speed_difference(30.0)
+        vehicles_list = generate_traffic(traffic_manager, client, sim_world, sim_world.get_blueprint_library(),
+                                         spawn_points)
+        # Spawn lidar
+
         clock = pygame.time.Clock()
+        # Spawn Lidar
+        lidar_cam = None
+        lidar_bp = world.world.get_blueprint_library().find('sensor.lidar.ray_cast')
+        lidar_bp.set_attribute('channels', str(64))
+        lidar_bp.set_attribute('points_per_second', str(90000))
+        lidar_bp.set_attribute('rotation_frequency', str(40))
+        lidar_bp.set_attribute('range', str(20))
+        lidar_location = carla.Location(0, 0, 2)
+        lidar_rotation = carla.Rotation(0, 0, 0)
+        lidar_transform = carla.Transform(lidar_location, lidar_rotation)
+        lidar_sen = world.world.spawn_actor(lidar_bp, lidar_transform, attach_to=world.player,
+                                            attachment_type=carla.AttachmentType.Rigid)
+        lidar_sen.listen(lambda point_cloud: point_cloud.save_to_disk(
+            'C:/Users/Bavo Lesy/PycharmProjects/RaceAI/tutorial/new_lidar_output/%.6d.ply' % point_cloud.frame))
+        sem_cam = None
+        sem_bp = world.world.get_blueprint_library().find('sensor.camera.rgb')
+        sem_bp.set_attribute("image_size_x", str(1920))
+        sem_bp.set_attribute("image_size_y", str(1080))
+        sem_bp.set_attribute("fov", str(105))
+        sem_location = carla.Location(2, 0, 1)
+        sem_rotation = carla.Rotation(0, 180, 0)
+        sem_transform = carla.Transform(sem_location, sem_rotation)
+        sem_cam = world.world.spawn_actor(sem_bp, sem_transform, attach_to=world.player,
+                                          attachment_type=carla.AttachmentType.Rigid)
+        # This time, a color converter is applied to the image, to get the semantic segmentation view
+        image_queue = queue.Queue()
+        sem_cam.listen(image_queue.put)
+        # sem_cam.listen(lambda image: image.save_to_disk('C:/Users/Bavo Lesy/PycharmProjects/RaceAI/tutorial/new_sem_output/%.6d.jpg' % image.frame, carla.ColorConverter.CityScapesPalette))
 
+        # Get the world to camera matrix
+        world_2_camera = np.array(sem_cam.get_transform().get_inverse_matrix())
+
+        # Get the attributes from the camera
+        image_w = sem_bp.get_attribute("image_size_x").as_int()
+        image_h = sem_bp.get_attribute("image_size_y").as_int()
+        fov = sem_bp.get_attribute("fov").as_float()
+
+        # Projection matrix to project from 3D -> 2D
+        K = build_projection_matrix(fov, image_w, image_h)
 
         while True:
             clock.tick()
+
             if args.sync:
                 world.world.tick()
             else:
-                world.world.wait_for_tick()
+                world.world.tick()
+                # world.world.wait_for_tick()
             if controller.parse_events():
                 return
 
             world.tick(clock)
             world.render(display)
             pygame.display.flip()
+            # save image
+            image = image_queue.get()
+            img = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
+            frame_path = 'C:/Users/Bavo Lesy/PycharmProjects/RaceAI/tutorial/new_sem_ooutput/%06d' % image.frame
+            image.save_to_disk(frame_path + '.png')
+            writer = Writer(frame_path + '.png', image_w, image_h)
+            # Get bounding boxes
+            # Get the bounding boxes of the objects in the scene
+            for vehicle in world.world.get_actors().filter('*vehicle*'):
+                if vehicle.id != world.player.id:
+                    bbox = vehicle.bounding_box
+                    # Get the location of the vehicle
+                    loc = vehicle.get_transform().location
+                    distance = loc.distance(world.player.get_transform().location)
+                    if distance < 50:
+                        vector = world.player.get_transform().get_forward_vector()
+                        ray = vehicle.get_transform().location - world.player.get_transform().location
+                        if vector.dot(ray) > 1:
+                            p1 = get_image_point(bbox.location, K, world_2_camera)
+                            verts = [v for v in bbox.get_world_vertices(vehicle.get_transform())]
+                            x_max = -10000
+                            x_min = 10000
+                            y_max = -10000
+                            y_min = 10000
 
+                            for vert in verts:
+                                p = get_image_point(vert, K, world_2_camera)
+                                # Find the rightmost vertex
+                                if p[0] > x_max:
+                                    x_max = p[0]
+                                # Find the leftmost vertex
+                                if p[0] < x_min:
+                                    x_min = p[0]
+                                # Find the highest vertex
+                                if p[1] > y_max:
+                                    y_max = p[1]
+                                # Find the lowest  vertex
+                                if p[1] < y_min:
+                                    y_min = p[1]
+
+                            # Add the object to the frame (ensure it is inside the image)
+                            # get name of the vehicle
+                            name = vehicle.type_id.split('.')[2]
+                            print(name)
+                            classification = 'vehicle'
+                            if name == 'crossbike' or name == 'low_rider' or name == 'ninja' or name == 'zx125' or name == 'yzf':
+                                classification = 'motorcycle'
+                            elif name == 'firetruck' or name == 'ambulance' or name == 'sprinter':
+                                classification = 'truck'
+                            if x_min > 0 and x_max < image_w and y_min > 0 and y_max < image_h:
+                                writer.addObject(classification, x_min, y_min, x_max, y_max)
+
+                            # Save the bounding boxes in the scene
+                            writer.save(frame_path + '.xml')
+
+            """
             if agent.done():
                 if args.loop:
                     agent.set_destination(random.choice(spawn_points).location)
@@ -766,10 +941,16 @@ def game_loop(args):
 
             control = agent.run_step()
             control.manual_gear_shift = False
+
             world.player.apply_control(control)
+            """
+
+
+
+
+
 
     finally:
-
         if world is not None:
             settings = world.world.get_settings()
             settings.synchronous_mode = False
@@ -777,8 +958,10 @@ def game_loop(args):
             world.world.apply_settings(settings)
             traffic_manager.set_synchronous_mode(True)
             # Destroy all vehicles
-            #client.apply_batch([carla.command.DestroyActor(x) for x in other_vehicles])
-
+            print('\ndestroying %d vehicles' % len(vehicles_list))
+            client.apply_batch([carla.command.DestroyActor(x) for x in vehicles_list])
+            # client.apply_batch([carla.command.DestroyActor(x) for x in other_vehicles])
+            # client.apply_batch([carla.command.DestroyActor(x) for x in other_vehicles])
         pygame.quit()
 
 
@@ -789,9 +972,84 @@ def game_loop(args):
 
 def main():
     """Main method"""
-
     argparser = argparse.ArgumentParser(
-        description='CARLA Automatic Control Client')
+        description=__doc__)
+    argparser.add_argument(
+        '-n', '--number-of-vehicles',
+        metavar='N',
+        default=30,
+        type=int,
+        help='Number of vehicles (default: 30)')
+    argparser.add_argument(
+        '-w', '--number-of-walkers',
+        metavar='W',
+        default=10,
+        type=int,
+        help='Number of walkers (default: 10)')
+    argparser.add_argument(
+        '--safe',
+        action='store_true',
+        help='Avoid spawning vehicles prone to accidents')
+    argparser.add_argument(
+        '--filterv',
+        metavar='PATTERN',
+        default='vehicle.*',
+        help='Filter vehicle model (default: "vehicle.*")')
+    argparser.add_argument(
+        '--generationv',
+        metavar='G',
+        default='All',
+        help='restrict to certain vehicle generation (values: "1","2","All" - default: "All")')
+    argparser.add_argument(
+        '--filterw',
+        metavar='PATTERN',
+        default='walker.pedestrian.*',
+        help='Filter pedestrian type (default: "walker.pedestrian.*")')
+    argparser.add_argument(
+        '--generationw',
+        metavar='G',
+        default='2',
+        help='restrict to certain pedestrian generation (values: "1","2","All" - default: "2")')
+    argparser.add_argument(
+        '--tm-port',
+        metavar='P',
+        default=8000,
+        type=int,
+        help='Port to communicate with TM (default: 8000)')
+    argparser.add_argument(
+        '--asynch',
+        action='store_true',
+        help='Activate asynchronous mode execution')
+    argparser.add_argument(
+        '--hybrid',
+        action='store_true',
+        help='Activate hybrid mode for Traffic Manager')
+    argparser.add_argument(
+        '--seedw',
+        metavar='S',
+        default=0,
+        type=int,
+        help='Set the seed for pedestrians module')
+    argparser.add_argument(
+        '--car-lights-on',
+        action='store_true',
+        default=False,
+        help='Enable automatic car light management')
+    argparser.add_argument(
+        '--hero',
+        action='store_true',
+        default=False,
+        help='Set one of the vehicles as hero')
+    argparser.add_argument(
+        '--respawn',
+        action='store_true',
+        default=False,
+        help='Automatically respawn dormant vehicles (only in large maps)')
+    argparser.add_argument(
+        '--no-rendering',
+        action='store_true',
+        default=False,
+        help='Activate no rendering mode')
     argparser.add_argument(
         '-v', '--verbose',
         action='store_true',

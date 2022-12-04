@@ -46,13 +46,13 @@ def get_actor_blueprints(world, filter, generation):
         print("   Warning! Actor Generation is not valid. No actor will be spawned.")
         return []
 
-def main():
+def generate():
     argparser = argparse.ArgumentParser(
         description=__doc__)
     argparser.add_argument(
         '--host',
         metavar='H',
-        default='127.0.0.1',
+        default='localhost',
         help='IP of the host server (default: 127.0.0.1)')
     argparser.add_argument(
         '-p', '--port',
@@ -367,7 +367,7 @@ def main():
 if __name__ == '__main__':
 
     try:
-        main()
+        generate()
     except KeyboardInterrupt:
         pass
     finally:

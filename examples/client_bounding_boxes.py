@@ -71,9 +71,6 @@ BB_COLOR = (248, 64, 24)
 # -- ClientSideBoundingBoxes ---------------------------------------------------
 # ==============================================================================
 
-def pause():
-    while 1:
-        a = 1
 
 class ClientSideBoundingBoxes(object):
     """
@@ -86,20 +83,11 @@ class ClientSideBoundingBoxes(object):
         """
         Creates 3D bounding boxes based on carla vehicle list and camera.
         """
-        bounding_boxes, cords = [], []
-        for vehicle in vehicles:
-            bounding_box, cord = ClientSideBoundingBoxes.get_bounding_box(vehicle, camera)
-            # print(cord.shape)
-            # print(cord)
-            # print(cord[2,0])
-            # filter objects behind camera
-            if all(bounding_box[:, 2]) > 0:
-                bounding_boxes.append(bounding_box)
-                cords.append(cord)
 
-
-        # bounding_boxes = [bb for bb in bounding_boxes if all(bb[:, 2] > 0)]
-        return bounding_boxes, cords
+        bounding_boxes = [ClientSideBoundingBoxes.get_bounding_box(vehicle, camera) for vehicle in vehicles]
+        # filter objects behind camera
+        bounding_boxes = [bb for bb in bounding_boxes if all(bb[:, 2] > 0)]
+        return bounding_boxes
 
     @staticmethod
     def draw_bounding_boxes(display, bounding_boxes):
@@ -113,6 +101,7 @@ class ClientSideBoundingBoxes(object):
             points = [(int(bbox[i, 0]), int(bbox[i, 1])) for i in range(8)]
             # draw lines
             # base
+            pygame.draw.line(bb_surface, BB_COLOR, points[0], points[1])
             pygame.draw.line(bb_surface, BB_COLOR, points[0], points[1])
             pygame.draw.line(bb_surface, BB_COLOR, points[1], points[2])
             pygame.draw.line(bb_surface, BB_COLOR, points[2], points[3])
@@ -130,56 +119,17 @@ class ClientSideBoundingBoxes(object):
         display.blit(bb_surface, (0, 0))
 
     @staticmethod
-    def save_bounding_boxes(type,bounding_boxes, cords, filename, status = "w"):
-        """
-        Draws bounding boxes on pygame display.
-        """
-        bounding_boxes = np.array(bounding_boxes)
-        cords = np.array(cords)
-        # print(bounding_boxes.shape)
-        # print(cords.shape)
-        # print(cords[0][0][0])
-                                                                                                                     
-        with open(filename,status) as f:
-            for index, bbox in enumerate(bounding_boxes):
-                points = [(int(bbox[i, 0]), int(bbox[i, 1])) for i in range(8)]
-                f.write(type)
-                f.write(' ')
-                for i in range(8):
-                    f.write(str(2*points[i][0]))
-                    f.write(' ')
-                    f.write(str(2*points[i][1]))
-                    f.write(' ')
-
-                for i in range(8):
-                    f.write(str(format(cords[index][0][i],'.4f')))
-                    f.write(' ')
-                    f.write(str(format(cords[index][1][i],'.4f')))
-                    f.write(' ')
-                    f.write(str(format(cords[index][2][i],'.4f')))
-                    f.write(' ')
-
-                f.write('\n')
-        f.close()
-
-    @staticmethod
     def get_bounding_box(vehicle, camera):
         """
         Returns 3D bounding box for a vehicle based on camera view.
         """
 
         bb_cords = ClientSideBoundingBoxes._create_bb_points(vehicle)
-        # print('shape',bb_cords.shape)
-        # print('bb_cords',bb_cords)
         cords_x_y_z = ClientSideBoundingBoxes._vehicle_to_sensor(bb_cords, vehicle, camera)[:3, :]
-        # print('cords_x_y_z',cords_x_y_z)
         cords_y_minus_z_x = np.concatenate([cords_x_y_z[1, :], -cords_x_y_z[2, :], cords_x_y_z[0, :]])
-        # print('cords_y_minus_z_x', cords_y_minus_z_x)
         bbox = np.transpose(np.dot(camera.calibration, cords_y_minus_z_x))
-        # print('bbox', bbox)
-        # pause()
         camera_bbox = np.concatenate([bbox[:, 0] / bbox[:, 2], bbox[:, 1] / bbox[:, 2], bbox[:, 2]], axis=1)
-        return camera_bbox, cords_y_minus_z_x
+        return camera_bbox
 
     @staticmethod
     def _create_bb_points(vehicle):
