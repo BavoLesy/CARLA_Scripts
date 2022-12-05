@@ -72,6 +72,26 @@ def generate_traffic(traffic_manager, client, blueprint_library, spawn_points):
     return vehicles_list
 
 
+def generate_walkers(client, world, blueprint_library, spawn_points, number_of_walkers):
+    return 0
+
+
+def filter_angle(vehicles_list, world, vehicle, fov):
+    filtered_vehicles = []
+    for npc in world.get_actors().filter('vehicle*'):
+        if npc.id in vehicles_list and npc.id != vehicle.id:
+            # npc transform
+            npc_transform = npc.get_transform()
+            # vehicle transform
+            vehicle_transform = vehicle.get_transform()
+            # angle between npc and vehicle
+            angle = np.arctan2(npc_transform.location - vehicle_transform.location) * 180 / np.pi
+            selector = np.array(np.absolute(angle) < (int(fov) / 2))
+            if selector:
+                filtered_vehicles.append(npc)
+    return filtered_vehicles
+
+
 def main(town):
     # Simulator
     client = carla.Client('localhost', 2000)
@@ -136,7 +156,7 @@ def main(town):
     traffic_manager = client.get_trafficmanager()
     traffic_manager.set_global_distance_to_leading_vehicle(2.5)
     traffic_manager.set_synchronous_mode(True)
-    traffic_list = generate_traffic(traffic_manager, client, blueprint_library, spawn_points)
+    vehicles_list = generate_traffic(traffic_manager, client, blueprint_library, spawn_points)
 
     world.tick()
     image = image_queue.get()
@@ -173,10 +193,10 @@ def main(town):
                     # Initialize the exporter
                     writer = Writer(image_path + '.png', image_w, image_h)
                     boxes = []
-                    for npc in world.get_actors().filter('vehicle*'):
-
+                    filtered_list = filter_angle(vehicles_list, world, vehicle, fov)
+                    for npc in filtered_list:
                         # Filter out the ego vehicle
-                        if npc.id != vehicle.id:
+                        if npc.id != vehicle.id and npc.id in vehicles_list:
                             #print(npc.id)
                             bb = npc.bounding_box
                             dist = npc.get_transform().location.distance(vehicle.get_transform().location)
