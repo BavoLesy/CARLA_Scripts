@@ -59,6 +59,8 @@ def generate_traffic(traffic_manager, client, blueprint_library, spawn_points):
             blueprint.set_attribute('color', color)
         blueprint.set_attribute('role_name', 'autopilot')
         # spawn
+        # Add the vehicle to the vehicles_list
+        vehicles_list.append(blueprint)
         print("spawned")
 
         batch.append(SpawnActor(blueprint, transform)
@@ -67,8 +69,8 @@ def generate_traffic(traffic_manager, client, blueprint_library, spawn_points):
     for response in client.apply_batch_sync(batch, False):
         if response.error:
             logging.error(response.error)
-        else:
-            vehicles_list.append(response.actor_id)
+        #else:
+            #vehicles_list.append(response.actor_id)
     return vehicles_list
 
 
