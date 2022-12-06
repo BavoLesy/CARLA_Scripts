@@ -138,8 +138,8 @@ def main(town):
     # Simulator
     client = carla.Client('localhost', 2000)
     client.set_timeout(10.0)
-    #world = client.load_world(town)
-    world = client.get_world()
+    world = client.load_world(town)
+    #world = client.get_world()
     blueprint_library = world.get_blueprint_library()
     spawn_points = world.get_map().get_spawn_points()
 
@@ -341,4 +341,4 @@ def main(town):
 
 
 if __name__ == "__main__":
-    main('Town10')
+    main('Town10HD')
