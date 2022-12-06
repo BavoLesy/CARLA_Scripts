@@ -228,8 +228,7 @@ def main(town):
                 # only take measurements every 20 frames
                 if image.frame % 20 == 0:
                     # Save the image -- for export
-                    image_path = 'output/camera_output/%06d' % image.frame
-
+                    image_path = 'output/camera_output/' + town + '/' + '%06d' % image.frame
                     image.save_to_disk(image_path + '.png')
 
                     # Initialize the exporter
@@ -303,7 +302,7 @@ def main(town):
 
                     cv2.imshow('CARLA RaceAI', img)
                     # save the image
-                    cv2.imwrite('C:/Users/Bavo Lesy/PycharmProjects/RaceAI/output/camera_output/bbox/' + str(image.frame) + '.png', img)
+                    cv2.imwrite('C:/Users/Bavo Lesy/PycharmProjects/RaceAI/output/camera_output' + town + '/' + '/bbox/' + str(image.frame) + '.png', img)
 
                 # Save liDAR data and create 3D bounding boxes
                 if pointcloud.frame % 20 == 0:
