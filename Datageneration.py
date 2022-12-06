@@ -76,20 +76,60 @@ def generate_walkers(client, world, blueprint_library, spawn_points, number_of_w
     return 0
 
 
-def filter_angle(vehicles_list, world, vehicle, fov):
-    filtered_vehicles = []
-    for npc in world.get_actors().filter('vehicle*'):
-        if npc.id in vehicles_list and npc.id != vehicle.id:
-            # npc transform
-            npc_transform = npc.get_transform()
-            # vehicle transform
-            vehicle_transform = vehicle.get_transform()
-            # angle between npc and vehicle
-            angle = np.arctan2(npc_transform.location, vehicle_transform.location) * 180 / np.pi
-            selector = np.array(np.absolute(angle) < (int(fov) / 2))
-            if selector:
-                filtered_vehicles.append(npc)
-    return filtered_vehicles
+def get_matrix(transform):
+    rotation = transform.rotation
+    location = transform.location
+    c_y = np.cos(np.radians(rotation.yaw))
+    s_y = np.sin(np.radians(rotation.yaw))
+    c_r = np.cos(np.radians(rotation.roll))
+    s_r = np.sin(np.radians(rotation.roll))
+    c_p = np.cos(np.radians(rotation.pitch))
+    s_p = np.sin(np.radians(rotation.pitch))
+    matrix = np.matrix(np.identity(4))
+    matrix[0, 3] = location.x
+    matrix[1, 3] = location.y
+    matrix[2, 3] = location.z
+    matrix[0, 0] = c_p * c_y
+    matrix[0, 1] = c_y * s_p * s_r - s_y * c_r
+    matrix[0, 2] = -c_y * s_p * c_r - s_y * s_r
+    matrix[1, 0] = s_y * c_p
+    matrix[1, 1] = s_y * s_p * s_r + c_y * c_r
+    matrix[1, 2] = -s_y * s_p * c_r + c_y * s_r
+    matrix[2, 0] = s_p
+    matrix[2, 1] = -c_p * s_r
+    matrix[2, 2] = c_p * c_r
+    return matrix
+
+
+### Get numpy 2D array of vehicles' location and rotation from world reference, also locations from sensor reference
+def get_list_transform(vehicles_list, sensor):
+    t_list = []
+    for vehicle in vehicles_list:
+        v = vehicle.get_transform()
+        transform = [v.location.x, v.location.y, v.location.z, v.rotation.roll, v.rotation.pitch, v.rotation.yaw]
+        t_list.append(transform)
+    t_list = np.array(t_list).reshape((len(t_list), 6))
+
+    transform_h = np.concatenate((t_list[:, :3], np.ones((len(t_list), 1))), axis=1)
+    sensor_world_matrix = get_matrix(sensor.get_transform())
+    world_sensor_matrix = np.linalg.inv(sensor_world_matrix)
+    transform_s = np.dot(world_sensor_matrix, transform_h.T).T
+
+    return t_list, transform_s
+
+
+def filter_angle_occlusion(vehicles_list, v_transform, v_transform_s, sensor):
+    """Filter out vehicles that are not in the field of view of the sensor"""
+    attr_dict = sensor.attributes
+    VIEW_FOV = float(attr_dict['fov'])
+    v_angle = np.arctan2(v_transform_s[:, 1], v_transform_s[:, 0]) * 180 / np.pi
+
+    selector = np.array(np.absolute(v_angle) < (int(VIEW_FOV) / 2))
+    vehicles_list_f = [v for v, s in zip(vehicles_list, selector) if s]
+    v_transform_f = v_transform[selector[:, 0], :]
+    v_transform_s_f = v_transform_s[selector[:, 0], :]
+    return vehicles_list_f, v_transform_f, v_transform_s_f
+
 
 
 def main(town):
@@ -183,6 +223,8 @@ def main(town):
 
                 # Get the camera matrix
                 world_2_camera = np.array(camera.get_transform().get_inverse_matrix())
+                # Get camera sensor
+                camera_sensor = world.get_actor(camera.id)
                 # only take measurements every 20 frames
                 if image.frame % 20 == 0:
                     # Save the image -- for export
@@ -193,7 +235,11 @@ def main(town):
                     # Initialize the exporter
                     writer = Writer(image_path + '.png', image_w, image_h)
                     boxes = []
-                    filtered_list = filter_angle(vehicles_list, world, vehicle, fov)
+                    vehicles_transform, vehicles_transform_s = get_list_transform(vehicles_list, camera_sensor)
+                    filtered_list, vehicles_transform, vehicles_transform_s = filter_angle_occlusion(vehicles_list,
+                                                                                           vehicles_transform,
+                                                                                           vehicles_transform_s, camera_sensor)
+
                     for npc in filtered_list:
                         # Filter out the ego vehicle
                         if npc.id != vehicle.id and npc.id in vehicles_list:
