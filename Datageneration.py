@@ -59,8 +59,6 @@ def generate_traffic(traffic_manager, client, blueprint_library, spawn_points):
             blueprint.set_attribute('color', color)
         blueprint.set_attribute('role_name', 'autopilot')
         # spawn
-        # Add the vehicle to the vehicles_list
-        vehicles_list.append(blueprint)
         print("spawned")
 
         batch.append(SpawnActor(blueprint, transform)
@@ -69,8 +67,8 @@ def generate_traffic(traffic_manager, client, blueprint_library, spawn_points):
     for response in client.apply_batch_sync(batch, False):
         if response.error:
             logging.error(response.error)
-        #else:
-            #vehicles_list.append(response.actor_id)
+        else:
+            vehicles_list.append(response.actor_id)
     return vehicles_list
 
 
@@ -120,18 +118,20 @@ def get_list_transform(vehicles_list, sensor):
     return t_list, transform_s
 
 
-def filter_angle_occlusion(vehicles_list, v_transform, v_transform_s, sensor):
-    """Filter out vehicles that are not in the field of view of the sensor"""
-    attr_dict = sensor.attributes
-    VIEW_FOV = float(attr_dict['fov'])
-    v_angle = np.arctan2(v_transform_s[:, 1], v_transform_s[:, 0]) * 180 / np.pi
-
-    selector = np.array(np.absolute(v_angle) < (int(VIEW_FOV) / 2))
-    vehicles_list_f = [v for v, s in zip(vehicles_list, selector) if s]
-    v_transform_f = v_transform[selector[:, 0], :]
-    v_transform_s_f = v_transform_s[selector[:, 0], :]
-    return vehicles_list_f, v_transform_f, v_transform_s_f
-
+def filter_angle_occlusion(vehicles_list, world, vehicle, fov):
+    filtered_vehicles = []
+    for npc in world.get_actors().filter('vehicle*'):
+        if npc.id in vehicles_list and npc.id != vehicle.id:
+            # npc transform
+            npc_transform = npc.get_transform()
+            # vehicle transform
+            vehicle_transform = vehicle.get_transform()
+            # angle between npc and vehicle
+            angle = np.arctan2(npc_transform.location, vehicle_transform.location) * 180 / np.pi
+            selector = np.array(np.absolute(angle) < (int(fov) / 2))
+            if selector:
+                filtered_vehicles.append(npc)
+    return filtered_vehicles
 
 
 def main(town):
@@ -146,13 +146,13 @@ def main(town):
     # spawn vehicle
     blueprint = blueprint_library.filter('model3')
 
-    vehicle = world.spawn_actor(blueprint[0], random.choice(spawn_points))
+    ego = world.spawn_actor(blueprint[0], random.choice(spawn_points))
 
     # spawn camera
     camera_bp = blueprint_library.find('sensor.camera.rgb')
     camera_init_trans = carla.Transform(carla.Location(z=2))
-    camera = world.spawn_actor(camera_bp, camera_init_trans, attach_to=vehicle)
-    vehicle.set_autopilot(True)
+    camera = world.spawn_actor(camera_bp, camera_init_trans, attach_to=ego)
+    ego.set_autopilot(True)
 
     # Set up the simulator in synchronous mode
     settings = world.get_settings()
@@ -174,8 +174,8 @@ def main(town):
     lidar_bp.set_attribute('upper_fov', str(7))
     lidar_bp.set_attribute('lower_fov', str(-16))
     # lidar_bp.set_attribute('horizontal_fov', str(360))
-    lidar_init_trans = carla.Transform(carla.Location(x=0.8, z=1.7))
-    lidar = world.spawn_actor(lidar_bp, carla.Transform(carla.Location(x=0.8, z=1.7)), attach_to=vehicle)
+    #lidar_init_trans = carla.Transform(carla.Location(x=0.8, z=1.7))
+    lidar = world.spawn_actor(lidar_bp, carla.Transform(carla.Location(x=0.8, z=1.7)), attach_to=ego)
     # Create a queue to store and retrieve the sensor data
     lidar_queue = queue.Queue()
     lidar.listen(lidar_queue.put)
@@ -225,34 +225,29 @@ def main(town):
 
                 # Get the camera matrix
                 world_2_camera = np.array(camera.get_transform().get_inverse_matrix())
-                # Get camera sensor
-                camera_sensor = world.get_actor(camera.id)
                 # only take measurements every 20 frames
                 if image.frame % 20 == 0:
                     # Save the image -- for export
-                    image_path = 'output/camera_output/images/%06d' % image.frame
+                    image_path = 'output/camera_output/%06d' % image.frame
 
                     image.save_to_disk(image_path + '.png')
 
                     # Initialize the exporter
                     writer = Writer(image_path + '.png', image_w, image_h)
                     boxes = []
-                    vehicles_transform, vehicles_transform_s = get_list_transform(vehicles_list, camera_sensor)
-                    filtered_list, vehicles_transform, vehicles_transform_s = filter_angle_occlusion(vehicles_list,
-                                                                                           vehicles_transform,
-                                                                                           vehicles_transform_s, camera_sensor)
 
-                    for npc in filtered_list:
+
+                    for npc in world.get_actors().filter('vehicle.*'):
                         # Filter out the ego vehicle
-                        if npc.id != vehicle.id and npc.id in vehicles_list:
+                        if npc.id != ego.id and npc.id in vehicles_list:
                             #print(npc.id)
                             bb = npc.bounding_box
-                            dist = npc.get_transform().location.distance(vehicle.get_transform().location)
+                            dist = npc.get_transform().location.distance(ego.get_transform().location)
 
                             # Filter for the vehicles within 50m
                             if 0.5 < dist < 50:
-                                forward_vec = vehicle.get_transform().get_forward_vector()
-                                ray = npc.get_transform().location - vehicle.get_transform().location
+                                forward_vec = ego.get_transform().get_forward_vector()
+                                ray = npc.get_transform().location - ego.get_transform().location
 
                                 if forward_vec.dot(ray) > 1:
                                     p1 = get_image_point(bb.location, K, world_2_camera)
@@ -307,20 +302,30 @@ def main(town):
                     writer.save(image_path + '.xml')
 
                     cv2.imshow('CARLA RaceAI', img)
+                    # save the image
+                    cv2.imwrite('C:/Users/Bavo Lesy/PycharmProjects/RaceAI/output/camera_output/bbox/' + str(image.frame) + '.png', img)
 
                 # Save liDAR data and create 3D bounding boxes
                 if pointcloud.frame % 20 == 0:
+
+                    #lidar_data = np.frombuffer(pointcloud.raw_data, dtype=np.dtype('f4'))
                     # Save the pointcloud-- for export
                     #lidar_path = 'output/lidar_output/%06d' % pointcloud.frame
+                    # Flip the pointcloud on y axis
+                    #lidar_data = np.reshape(lidar_data, (int(lidar_data.shape[0] / 3), 3))
+
+                    #lidar_data[:, 1] *= -1
+                    # Save the pointcloud
+                    #np.save(lidar_path, lidar_data)
                     #pointcloud.save_to_disk(lidar_path + '.ply')
                     # I think maybe z should be -z coord?
                     # Save the 3D bounding boxes of all the cars in the scene in xml file
-                    #lidar_data = np.frombuffer(pointcloud.raw_data, dtype=np.dtype('f4'))
-                    #lidar_data = np.reshape(lidar_data, (int(lidar_data.shape[0] / 4), 4))
-                    #lidar_data = lidar_data[:, :3]
-                    #lidar_data = lidar_data.reshape(-1)
-                    #lidar_data = np.array(lidar_data, dtype=np.float32)
-                    #lidar_data = np.reshape(lidar_data, (int(lidar_data.shape[0] / 3), 3))
+                    # lidar_data = np.frombuffer(pointcloud.raw_data, dtype=np.dtype('f4'))
+                    # lidar_data = np.reshape(lidar_data, (int(lidar_data.shape[0] / 4), 4))
+                    # lidar_data = lidar_data[:, :3]
+                    # lidar_data = lidar_data.reshape(-1)
+                    # lidar_data = np.array(lidar_data, dtype=np.float32)
+                    # lidar_data = np.reshape(lidar_data, (int(lidar_data.shape[0] / 3), 3))
 
 
 
