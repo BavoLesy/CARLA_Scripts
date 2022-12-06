@@ -85,7 +85,7 @@ def filter_angle(vehicles_list, world, vehicle, fov):
             # vehicle transform
             vehicle_transform = vehicle.get_transform()
             # angle between npc and vehicle
-            angle = np.arctan2(npc_transform.location - vehicle_transform.location) * 180 / np.pi
+            angle = np.arctan2(npc_transform.location, vehicle_transform.location) * 180 / np.pi
             selector = np.array(np.absolute(angle) < (int(fov) / 2))
             if selector:
                 filtered_vehicles.append(npc)
@@ -233,8 +233,8 @@ def main(town):
                                         if box[0] <= x_min and box[1] <= y_min and box[2] >= x_max and box[3] >= y_max:
                                             already_there = True
                                     if not already_there:
-                                        cv2.line(img, (int(x_min),int(y_min)), (int(x_max),int(y_min)), (0,0,255, 255), 1)
-                                        cv2.line(img, (int(x_min),int(y_max)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
+                                        cv2.line(img, (int(x_min), int(y_min)), (int(x_max), int(y_min)), (0,0,255, 255), 1)
+                                        cv2.line(img, (int(x_min), int(y_max)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
                                         cv2.line(img, (int(x_min),int(y_min)), (int(x_min),int(y_max)), (0,0,255, 255), 1)
                                         cv2.line(img, (int(x_max),int(y_min)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
                                         # get name of the vehicle
