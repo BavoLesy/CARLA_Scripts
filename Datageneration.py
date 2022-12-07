@@ -1,4 +1,5 @@
 import logging
+import os
 
 import carla
 import math
@@ -34,7 +35,7 @@ def get_image_point(loc, K, w2c):
     return point_img[0:2]
 
 
-def generate_traffic(traffic_manager, client, blueprint_library, spawn_points):
+def generate_traffic(traffic_manager, client, blueprint_library, spawn_points, num_vehicles):
     """Generate traffic"""
     traffic_manager.set_global_distance_to_leading_vehicle(2.5)
     traffic_manager.set_random_device_seed(0)
@@ -51,7 +52,7 @@ def generate_traffic(traffic_manager, client, blueprint_library, spawn_points):
     vehicles_list = []
 
     for n, transform in enumerate(spawn_points):
-        if n >= 100:
+        if n >= num_vehicles:
             break
         blueprint = random.choice(vehicle_bp)
         if blueprint.has_attribute('color'):
@@ -59,7 +60,7 @@ def generate_traffic(traffic_manager, client, blueprint_library, spawn_points):
             blueprint.set_attribute('color', color)
         blueprint.set_attribute('role_name', 'autopilot')
         # spawn
-        print("spawned")
+        #print("spawned")
 
         batch.append(SpawnActor(blueprint, transform)
                      .then(SetAutopilot(FutureActor, True, traffic_manager.get_port())))
@@ -134,10 +135,11 @@ def filter_angle_occlusion(vehicles_list, world, vehicle, fov):
     return filtered_vehicles
 
 
-def main(town):
+def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
     # Simulator
+    global xmin_bool
     client = carla.Client('localhost', 2000)
-    client.set_timeout(10.0)
+    client.set_timeout(15.0)
     world = client.load_world(town)
     #world = client.get_world()
     blueprint_library = world.get_blueprint_library()
@@ -198,7 +200,10 @@ def main(town):
     traffic_manager = client.get_trafficmanager()
     traffic_manager.set_global_distance_to_leading_vehicle(2.5)
     traffic_manager.set_synchronous_mode(True)
-    vehicles_list = generate_traffic(traffic_manager, client, blueprint_library, spawn_points)
+    vehicles_list = generate_traffic(traffic_manager, client, blueprint_library, spawn_points, num_of_vehicles)
+    # Spawn pedestrians and also detect the bounding boxes
+
+    # Detect traffic Lights bounding boxes
 
     world.tick()
     image = image_queue.get()
@@ -213,9 +218,11 @@ def main(town):
     cv2.namedWindow('CARLA RaceAI', cv2.WINDOW_AUTOSIZE)
     cv2.imshow('CARLA RaceAI', img)
     cv2.waitKey(1)
+    i = 50
+    boxes = []
     try:
         ### Game loop ###
-        while True:
+        while image.frame < num_of_frames:
                 # Retrieve and reshape the image
                 world.tick()
                 image = image_queue.get()
@@ -225,26 +232,21 @@ def main(town):
 
                 # Get the camera matrix
                 world_2_camera = np.array(camera.get_transform().get_inverse_matrix())
-                # only take measurements every 20 frames
-                if image.frame % 20 == 0:
+                # only take measurements every 50 frames
+                if image.frame % 30 == 0:
+                    i = 0
                     # Save the image -- for export
-                    image_path = 'output/camera_output/' + town + '/' + '%06d' % image.frame
-                    image.save_to_disk(image_path + '.png')
-
                     # Initialize the exporter
-                    writer = Writer(image_path + '.png', image_w, image_h)
+
                     boxes = []
-
-
-                    for npc in world.get_actors().filter('vehicle.*'):
+                    for npc in world.get_actors():
                         # Filter out the ego vehicle
                         if npc.id != ego.id and npc.id in vehicles_list:
-                            #print(npc.id)
                             bb = npc.bounding_box
                             dist = npc.get_transform().location.distance(ego.get_transform().location)
 
                             # Filter for the vehicles within 50m
-                            if 0.5 < dist < 50:
+                            if 0.5 < dist < 60:
                                 forward_vec = ego.get_transform().get_forward_vector()
                                 ray = npc.get_transform().location - ego.get_transform().location
 
@@ -267,42 +269,101 @@ def main(town):
                                         # Find the highest vertex
                                         if p[1] > y_max:
                                             y_max = p[1]
-                                        # Find the lowest  vertex
+                                        # Find the lowest vertex
                                         if p[1] < y_min:
                                             y_min = p[1]
-                                    already_there = False
-                                    for box in boxes:
-                                        if box[0] <= x_min and box[1] <= y_min and box[2] >= x_max and box[3] >= y_max:
-                                            already_there = True
-                                    if not already_there:
-                                        cv2.line(img, (int(x_min), int(y_min)), (int(x_max), int(y_min)), (0,0,255, 255), 1)
-                                        cv2.line(img, (int(x_min), int(y_max)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
-                                        cv2.line(img, (int(x_min),int(y_min)), (int(x_min),int(y_max)), (0,0,255, 255), 1)
-                                        cv2.line(img, (int(x_max),int(y_min)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
-                                        # get name of the vehicle
-                                        name = npc.type_id.split('.')[2]
-                                        print(name)
-
-                                        classification = 'vehicle'
-                                        if name == 'crossbike' or name == 'low_rider' or name == 'ninja' or name == 'zx125' or name == 'yzf' or name == 'omafiets':
-                                            classification = 'motorcycle'
-                                        elif name == 'firetruck' or name == 'ambulance' or name == 'sprinter' or name == 'carlacola':
-                                            classification = 'truck'
-                                        print(classification)
-                                        # not already a bounding box there
-
-                                        if x_min > 0 and x_max < image_w and y_min > 0 and y_max < image_h:
-                                            writer.addObject(classification, x_min, y_min, x_max, y_max)
-                                            boxes.append([x_min, y_min, x_max, y_max])
+                                    name = npc.type_id.split('.')[2]
+                                    classification = 'car'
+                                    if name == 'ambulance' or name == 'fire_truck' or name == 'police' or name == 'police_2020':
+                                        classification = 'emergency'
+                                    elif name == 'crossbike' or name == 'low_rider' or name == 'ninja' or name == 'zx125' or name == 'yzf' or name == 'omafiets':
+                                        classification = 'motorcycle'
+                                    elif name == 'sprinter' or name == 'carlacola':
+                                        classification = 'van'
+                                        # Add the object to the frame (ensure it is inside the image)
+                                    if x_min > 0 and x_max < image_w and y_min > 0 and y_max < image_h:
+                                        boxes.append([x_min, y_min, x_max, y_max, classification])
 
 
 
-                    # Save the bounding boxes in the scene
+
+
+
+                i += 1
+                if i == 3:
+                    # Compare the bounding boxes to every other bounding box
+                    # Filter out bad boxes
+                    for box in boxes:
+                        for other_box in boxes:
+                            # If the boxes are the same, skip
+                            if box != other_box:
+                                box_w = box[2] - box[0]
+                                box_h = box[3] - box[1]
+                                other_box_w = other_box[2] - other_box[0]
+                                other_box_h = other_box[3] - other_box[1]
+                                # Check if box is fully contained in other_box
+                                if other_box[0] <= box[0] and other_box[1] <= box[1] and other_box[2] >= box[2] and other_box[3] >= box[3]:
+                                    # If the box is fully contained, remove it
+                                    boxes.remove(box)
+                                    break
+                            """
+                                # If the box is 80% contained in other_box, remove it
+                                elif (other_box[0] <= box[0] and other_box[2] <= (box[2]+(box_w*0.2))) and (other_box[1] <= box[1] and other_box[3] <= (box[3]+(box_h*0.2))):
+                                    boxes.remove(box)
+                                    break
+                                elif (other_box[0] >= (box[0]-(box_w*0.2)) and other_box[2] >= box[2]) and (other_box[1] <= box[1] and other_box[3] <= (box[3]+(box_h*0.2))):
+                                    boxes.remove(box)
+                                    break
+                                elif (other_box[0] <= box[0] and other_box[2] <= (box[2]+(box_w*0.2))) and (other_box[1] >= (box[1]-(box_h*0.2)) and other_box[3] >= box[3]):
+                                    boxes.remove(box)
+                                    break
+                                elif (other_box[0] >= (box[0]-(box_w*0.2)) and other_box[2] >= box[2]) and (other_box[1] >= (box[1]-(box_h*0.2)) and other_box[3] >= box[3]):
+                                    boxes.remove(box)
+                                    break
+                                elif (other_box[0] <= box[0]+(box_w*0.2) and other_box[2] >= box[2]-(box_w*0.2)) and (other_box[1] <= box[1] and other_box[3] >= box[3]):
+                                    boxes.remove(box)
+                                    break
+                                elif (other_box[0] <= box[0] and other_box[2] >= box[2]) and (other_box[1] <= box[1]+(box_h*0.2) and other_box[3] >= box[3]-(box_h*0.2)):
+                                    boxes.remove(box)
+                                    break
+                            
+
+
+
+
+
+                                
+                                # Check if box is contained in multiple other_boxes
+                                if other_box[0] <= box[0]:
+                                    xmin_bool = True
+                                if other_box[1] <= box[1]:
+                                    ymin_bool = True
+                                if other_box[2] >= box[2]:
+                                    xmax_bool = True
+                                if other_box[3] >= box[3]:
+                                    ymax_bool = True
+                        if xmin_bool and ymin_bool and xmax_bool and ymax_bool:
+                            boxes.remove(box)
+                        """
+                    image_path = 'output/camera_output/' + town + '/' + '%06d' % image.frame
+                    image.save_to_disk(image_path + '.png')
+                    writer = Writer(image_path + '.png', image_w, image_h)
+                    for box in boxes:
+                        cv2.line(img, (int(box[0]), int(box[1])), (int(box[2]), int(box[1])), (0, 0, 255, 255), 1)
+                        cv2.line(img, (int(box[0]), int(box[3])), (int(box[2]), int(box[3])), (0, 0, 255, 255), 1)
+                        cv2.line(img, (int(box[0]), int(box[1])), (int(box[0]), int(box[3])), (0, 0, 255, 255), 1)
+                        cv2.line(img, (int(box[2]), int(box[1])), (int(box[2]), int(box[3])), (0, 0, 255, 255), 1)
+
+                        writer.addObject(box[4], box[0], box[1], box[2], box[3])
+
+                        # Save the bounding boxes in the scene
                     writer.save(image_path + '.xml')
 
                     cv2.imshow('CARLA RaceAI', img)
                     # save the image
-                    cv2.imwrite('C:/Users/Bavo Lesy/PycharmProjects/RaceAI/output/camera_output' + town + '/' + '/bbox/' + str(image.frame) + '.png', img)
+                    if not os.path.exists('output/camera_output/' + town + '/bbox'):
+                        os.makedirs('output/camera_output/' + town + '/bbox/')
+                    cv2.imwrite('C:/Users/Bavo Lesy/PycharmProjects/RaceAI/output/camera_output/' + town + '/bbox/' + str(image.frame) + '.png', img)
 
                 # Save liDAR data and create 3D bounding boxes
                 if pointcloud.frame % 20 == 0:
@@ -332,7 +393,9 @@ def main(town):
                         break
     finally:
         # Destroy the actors
-        for actor in world.get_actors().filter('vehicle*'):
+        for actor in world.get_actors().filter('vehicle.*'):
+            actor.destroy()
+        for actor in world.get_actors().filter('sensor.*'):
             actor.destroy()
         print('All actors destroyed.')
 
@@ -340,4 +403,17 @@ def main(town):
 
 
 if __name__ == "__main__":
-    main('Town10HD')
+    # Measurement every 50 frames, we want 400 measurement per town, so 30 * 400 = 16000+ 4000 for bad measurements
+    # TO DO: change weather dynamically for each town
+
+    frames = 20000
+    num_vehicle = 75
+    num_pedestrian = 30
+    main('Town10HD', num_vehicle, num_pedestrian, frames)
+    main('Town01', num_vehicle, num_pedestrian, frames)
+    main('Town02', num_vehicle, num_pedestrian, frames)
+    main('Town03', num_vehicle, num_pedestrian, frames)
+    main('Town04', num_vehicle, num_pedestrian, frames)
+    main('Town05', num_vehicle, num_pedestrian, frames)
+
+
