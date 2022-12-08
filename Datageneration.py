@@ -137,7 +137,6 @@ def filter_angle_occlusion(vehicles_list, world, vehicle, fov):
 
 def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
     # Simulator
-    global xmin_bool
     client = carla.Client('localhost', 2000)
     client.set_timeout(15.0)
     world = client.load_world(town)
@@ -283,12 +282,6 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                                         # Add the object to the frame (ensure it is inside the image)
                                     if x_min > 0 and x_max < image_w and y_min > 0 and y_max < image_h:
                                         boxes.append([x_min, y_min, x_max, y_max, classification])
-
-
-
-
-
-
                 i += 1
                 if i == 3:
                     # Compare the bounding boxes to every other bounding box
@@ -363,7 +356,7 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                     # save the image
                     if not os.path.exists('output/camera_output/' + town + '/bbox'):
                         os.makedirs('output/camera_output/' + town + '/bbox/')
-                    cv2.imwrite('C:/Users/Bavo Lesy/PycharmProjects/RaceAI/output/camera_output/' + town + '/bbox/' + str(image.frame) + '.png', img)
+                    cv2.imwrite('output/camera_output/' + town + '/bbox/' + str(image.frame) + '.png', img)
 
                 # Save liDAR data and create 3D bounding boxes
                 if pointcloud.frame % 20 == 0:
