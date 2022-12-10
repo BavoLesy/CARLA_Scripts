@@ -1,19 +1,14 @@
+import logging
 import os
 import queue
 import random
-import sys
 import time
-
 import cv2
 import numpy as np
-import platform
-
-from PIL import Image
-from PIL import ImageDraw
 import carla
-import pygame
 import tensorflow as tf
-# We want to run a custom tensorflow object detection model in Carla using
+
+# We want to run a custom tensorflow object detection model in Carla
 from object_detection.builders import model_builder
 from object_detection.utils import config_util
 from object_detection.utils import visualization_utils as viz_utils
@@ -35,14 +30,15 @@ def get_model_detection_function(model):
 
     return detect_fn
 
+
 def load_model(model_path):
     """Loads the model.
 
     Args:
-        model_path: Path to the .tflite file.
+        model_path: Path to the model directory.
 
     Returns:
-        A tuple of (interpreter, input_details, output_details).
+        Object detection model.
     """
     pipeline_config = model_path + 'pipeline.config'
     model_dir = model_path + 'checkpoint/ckpt-0'
@@ -57,69 +53,82 @@ def load_model(model_path):
 
     return detection_model
 
+def generate_traffic(traffic_manager, client, blueprint_library, spawn_points, num_vehicles):
+    """Generate traffic"""
+    traffic_manager.set_global_distance_to_leading_vehicle(2.5)
+    traffic_manager.set_random_device_seed(0)
+    traffic_manager.set_synchronous_mode(True)
+    traffic_manager.global_percentage_speed_difference(30.0)
+    vehicle_bp = blueprint_library.filter('vehicle.*')
+    spawn_points = spawn_points
+    number_of_spawn_points = len(spawn_points)
 
-def run_inference(interpreter, image, input_details, output_details):
-    """Runs inference on an input image.
+    SpawnActor = carla.command.SpawnActor
+    SetAutopilot = carla.command.SetAutopilot
+    FutureActor = carla.command.FutureActor
+    batch = []
+    vehicles_list = []
 
-    Args:
-        interpreter: Interpreter object.
-        image: Input image.
+    for n, transform in enumerate(spawn_points):
+        if n >= num_vehicles:
+            break
+        blueprint = random.choice(vehicle_bp)
+        if blueprint.has_attribute('color'):
+            color = random.choice(blueprint.get_attribute('color').recommended_values)
+            blueprint.set_attribute('color', color)
+        blueprint.set_attribute('role_name', 'autopilot')
+        # spawn
+        #print("spawned")
 
-    Returns:
-        A tuple of (boxes, classes, scores).
-    """
-    # Pre-processing: add batch dimension and convert to float32 to match with
-    # the model's input data format.
-    image = np.expand_dims(image, axis=0)
-    print(image.shape)
-    # Run inference.
-    #size = np.ones(1, dtype=np.dtype("uint8"))
-    #set size to uint8
-    #interpreter.set_tensor(input_details[0]['index'], size)
+        batch.append(SpawnActor(blueprint, transform)
+                     .then(SetAutopilot(FutureActor, True, traffic_manager.get_port())))
 
-    #interpreter.set_tensor(input_details[0]['index'], image)
-    interpreter.set_tensor(input_details[0]['index'], image)
-    interpreter.invoke()
-    # Post-processing: remove batch dimension and find the detections with
-    # confidence score above the threshold.
-    boxes = interpreter.get_tensor(output_details[1]['index'])[0]
-    classes = interpreter.get_tensor(output_details[2]['index'])[0]
-    scores = interpreter.get_tensor(output_details[0]['index'])[0]
-    #count = int(interpreter.get_tensor(output_details[3]['index'])[0])
-    return boxes, classes, scores
+    for response in client.apply_batch_sync(batch, False):
+        if response.error:
+            logging.error(response.error)
+        else:
+            vehicles_list.append(response.actor_id)
+    return vehicles_list
 
-def main(model_path):
+
+
+def main(model_path, town, num_vehicles, num_frames, ):
     # Setup world and spawn ego
     client = carla.Client('localhost', 2000)
     client.set_timeout(15.0)
-    world = client.get_world()
+    #world = client.get_world()
+    world = client.load_world(town)
     blueprint_library = world.get_blueprint_library()
     bp = blueprint_library.filter('vehicle.tesla.model3')[0]
     spawn_points = world.get_map().get_spawn_points()
     ego = world.spawn_actor(bp, random.choice(spawn_points))
     ego.set_autopilot(True)
+
     # Sync mode
     settings = world.get_settings()
     settings.synchronous_mode = True  # Enables synchronous mode
     settings.fixed_delta_seconds = 0.05  # (20fps)
     world.apply_settings(settings)
+
     # spawn camera
     camera_bp = blueprint_library.find('sensor.camera.rgb')
     camera_init_trans = carla.Transform(carla.Location(z=2))
     camera = world.spawn_actor(camera_bp, camera_init_trans, attach_to=ego)
+
     # Create a queue to store and retrieve the sensor data
     image_queue = queue.Queue()
     camera.listen(image_queue.put)
-    world.tick()
-    # Get image
-    image = image_queue.get()
-    image_width, image_height = 600, 400
-    # Start pygame
-    pygame.init()
-    pygame.font.init()
-    display = pygame.display.set_mode((800, 600))
-    clock = pygame.time.Clock()
 
+    world.tick()
+    image = image_queue.get()
+
+    # Generate traffic
+    traffic_manager = client.get_trafficmanager()
+    traffic_manager.set_global_distance_to_leading_vehicle(2.5)
+    traffic_manager.set_synchronous_mode(True)
+    vehicles_list = generate_traffic(traffic_manager, client, blueprint_library, spawn_points, num_vehicles)
+
+    # Load model and labels and create detection function
     detection_model = load_model(model_path)
     detect_fn = get_model_detection_function(detection_model)
     label_map_pbtxt_fname = model_path + 'labelmap.pbtxt'
@@ -132,26 +141,21 @@ def main(model_path):
     category_index = label_map_util.create_category_index(categories)
     label_map_dict = label_map_util.get_label_map_dict(label_map, use_display_name=True)
 
-
-    while True:
-        clock.tick(20)
+    # Main Game Loop, run until we reach the desired number of frames
+    while image.frame < num_frames:
         world.tick()
         # Get image
         image = image_queue.get()
         # Get image as numpy array with shape (600, 800, 3)
         array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
-        #Create a PIL image from the array
-        pil_image = Image.fromarray(array.reshape((image.height, image.width, 4)))
-        #Convert the PIL image to RGB
-        pil_image = pil_image.convert('RGB')
         reshaped_array = np.reshape(array, (image.height, image.width, 4))
         array = reshaped_array[:, :, :3]
         array = array[:, :, ::-1]
 
-
+        # Perform detection
+        t0 = time.perf_counter()
         input_tensor = tf.convert_to_tensor(np.expand_dims(array, 0), dtype=tf.float32)
         detections, predictions_dict, shapes = detect_fn(input_tensor)
-
         label_id_offset = 1
         image_np_with_detections = array.copy()
         viz_utils.visualize_boxes_and_labels_on_image_array(
@@ -162,49 +166,24 @@ def main(model_path):
             category_index,
             use_normalized_coordinates=True,
             max_boxes_to_draw=20,
-            min_score_thresh=.1,
+            min_score_thresh=.3,
             agnostic_mode=False)
-        # show image as rgb
-        cv2.imshow('image', image_np_with_detections)
-        #cv2.imshow('name' , image_np_with_detections)
-        #boxes, classes, scores = run_inference(interpreter, array, input_details, output_details)
-        #print(boxes, classes, scores)
-        #for i in range(len(boxes)):
-        #    if scores[i] > 0.5:
-        #        box = boxes[i]
-        #        x1 = int(box[1] * image_width)
-        #        y1 = int(box[0] * image_height)
-        #        x2 = int(box[3] * image_width)
-        #        y2 = int(box[2] * image_height)
-        #        pygame.draw.rect(display, colors[classes[i]], (x1, y1, x2 - x1, y2 - y1), 2)
-        #        display.blit(font.render(labels[classes[i]], True, colors[classes[i]]), (x1, y1))
-        #pygame.display.flip()
-        # Convert the PIL image to a numpy array
-        image_np = np.array(pil_image)
-        # Display the resulting frame
-        #cv2.imshow('frame', image_np_with_detections)
+        t1 = time.perf_counter()
+        print(f"Time to run inference: {t1 - t0:0.4f} seconds")
+
+        # Display image
+        # convert cv2 image to rbg image
+        cv2_im = cv2.cvtColor(image_np_with_detections, cv2.COLOR_BGR2RGB)
+        cv2.imshow('RaceAI RT-Classification',cv2_im)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-        # Run inference
-        t0 = time.perf_counter()
-        # Get image from array
-
-
-        np_image = np.asarray(pil_image)
-
-
-
-        pygame.display.set_caption('Carla Object Detection')
-        # Check for quit event
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return
-        # Run inference
-
-
-
 
 
 if __name__ == '__main__':
-    main('models/saved_model_v1/')
 
+
+    model_path = 'models/saved_model_v2/'
+    num_vehicles = 75
+    num_frames = 10000
+
+    main(model_path, "Town10HD", num_vehicles, num_frames)

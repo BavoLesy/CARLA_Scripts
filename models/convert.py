@@ -1,5 +1,6 @@
 import tensorflow as tf
 
+# Convert tf models to tf lite models
 saved_model_dir = 'C:\\Users\\Bavo Lesy\\PycharmProjects\\RaceAI\\models\\saved_model_v1'
 model = tf.saved_model.load(saved_model_dir)
 concrete_func = model.signatures[tf.saved_model.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
