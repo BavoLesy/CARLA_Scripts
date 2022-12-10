@@ -166,7 +166,7 @@ def main(model_path, town, num_vehicles, num_frames, ):
             category_index,
             use_normalized_coordinates=True,
             max_boxes_to_draw=20,
-            min_score_thresh=.3,
+            min_score_thresh=.5,
             agnostic_mode=False)
         t1 = time.perf_counter()
         print(f"Time to run inference: {t1 - t0:0.4f} seconds")
