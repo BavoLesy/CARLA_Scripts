@@ -317,10 +317,12 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                                         y_min = p[1]
                                 name = npc.type_id.split('.')[2]
                                 classification = 'car'
-                                if name == 'ambulance' or name == 'fire_truck' or name == 'police' or name == 'police_2020':
+                                if name == 'ambulance' or name == 'firetruck' or name == 'charger_police' or name == 'charger_police_2020':
                                     classification = 'emergency'
-                                elif name == 'crossbike' or name == 'low_rider' or name == 'ninja' or name == 'zx125' or name == 'yzf' or name == 'omafiets':
+                                elif name == 'crossbike' or name == 'low_rider' or name == 'ninja' or name == 'zx125' or name == 'yzf':
                                     classification = 'motorcycle'
+                                elif name == 'omafiets':
+                                    classification = 'bicycle'
                                 elif name == 'sprinter' or name == 'carlacola':
                                     classification = 'van'
                                     # Add the object to the frame (ensure it is inside the image)
@@ -437,15 +439,14 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                             # get type of the vehicle
                             name = npc.type_id.split('.')[2]
                             classification = 'car'
-                            if name == 'ambulance' or name == 'fire_truck' or name == 'police' or name == 'police_2020':
+                            if name == 'ambulance' or name == 'firetruck' or name == 'charger_police' or name == 'charger_police_2020':
                                 classification = 'emergency'
-                            elif name == 'crossbike' or name == 'low_rider' or name == 'ninja' or name == 'zx125' or name == 'yzf' or name == 'omafiets':
+                            elif name == 'crossbike' or name == 'low_rider' or name == 'ninja' or name == 'zx125' or name == 'yzf':
                                 classification = 'motorcycle'
+                            elif name == 'omafiets':
+                                classification = 'bicycle'
                             elif name == 'sprinter' or name == 'carlacola':
                                 classification = 'van'
-                       
-
-
                             labels.append({
                                 'type': "DontCare",
                                 'truncated': 0,
@@ -510,7 +511,7 @@ if __name__ == "__main__":
     frames = 20000
     num_vehicle = 75
     num_pedestrian = 30
-    main('Town04', num_vehicle, num_pedestrian, frames)
+    #main('Town04', num_vehicle, num_pedestrian, frames)
     main('Town10HD', num_vehicle, num_pedestrian, frames)
     main('Town01', num_vehicle, num_pedestrian, frames)
     main('Town02', num_vehicle, num_pedestrian, frames)
