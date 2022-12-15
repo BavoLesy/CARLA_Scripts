@@ -94,7 +94,7 @@ def generate_traffic(traffic_manager, client, blueprint_library, spawn_points, n
 
 def main(model_path, town, num_vehicles, num_frames, ):
     # Setup world and spawn ego
-    client = carla.Client('localhost', 2000)
+    client = carla.Client('192.168.56.20', 2000)
     client.set_timeout(15.0)
     #world = client.get_world()
     world = client.load_world(town)

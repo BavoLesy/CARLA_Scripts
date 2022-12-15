@@ -273,14 +273,18 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                                             y_min = p[1]
                                     name = npc.type_id.split('.')[2]
                                     classification = 'car'
-                                    if name == 'ambulance' or name == 'fire_truck' or name == 'police' or name == 'police_2020':
+                                    if name == 'ambulance' or name == 'firetruck' or name == 'charger_police' or name == 'charger_police_2020':
                                         classification = 'emergency'
                                     elif name == 'crossbike' or name == 'low_rider' or name == 'ninja' or name == 'zx125' or name == 'yzf' or name == 'omafiets':
                                         classification = 'motorcycle'
                                     elif name == 'sprinter' or name == 'carlacola':
                                         classification = 'van'
                                         # Add the object to the frame (ensure it is inside the image)
-                                    if x_min > 0 and x_max < image_w and y_min > 0 and y_max < image_h:
+                                    x_min = np.clip(x_min, 0, image_w)
+                                    x_max = np.clip(x_max, 0, image_w)
+                                    y_min = np.clip(y_min, 0, image_h)
+                                    y_max = np.clip(y_max, 0, image_h)
+                                    if x_min != x_max and y_min != y_max:
                                         boxes.append([x_min, y_min, x_max, y_max, classification])
                 i += 1
                 if i == 3:
