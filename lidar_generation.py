@@ -164,6 +164,7 @@ def degrees_to_radians(degrees):
 
 def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
     # Simulator
+    global semantic_list
     client = carla.Client('localhost', 2000)
     client.set_timeout(15.0)
     world = client.load_world(town)
@@ -207,7 +208,19 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
     # Create a queue to store and retrieve the sensor data
     lidar_queue = queue.Queue()
     lidar.listen(lidar_queue.put)
+    #Semantic lidar
+    sem_lidar_bp = blueprint_library.find('sensor.lidar.ray_cast_semantic')
+    sem_lidar_bp.set_attribute('channels', '32')
+    sem_lidar_bp.set_attribute('range', '80')
+    sem_lidar_bp.set_attribute('rotation_frequency', '20')
+    # fov
+    sem_lidar_bp.set_attribute('points_per_second', str(64 / 0.00004608 * 2))
+    sem_lidar_bp.set_attribute('upper_fov', str(2))
+    sem_lidar_bp.set_attribute('lower_fov', str(-24.8))
 
+    sem_lidar = world.spawn_actor(sem_lidar_bp, carla.Transform(carla.Location(x=0, y=0, z=1.8), carla.Rotation(pitch=0, yaw=0, roll=0)), attach_to=ego)
+    sem_lidar_queue = queue.Queue()
+    sem_lidar.listen(sem_lidar_queue.put)
     # Get the attributes from the camera
     image_w = camera_bp.get_attribute("image_size_x").as_int()
     image_h = camera_bp.get_attribute("image_size_y").as_int()
@@ -251,21 +264,27 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
             world.tick()
             image = image_queue.get()
             pointcloud = lidar_queue.get()
-
+            sem_pointcloud = sem_lidar_queue.get()
             img = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
 
             # Get the camera matrix
             world_2_camera = np.array(camera.get_transform().get_inverse_matrix())
             # only take measurements every 50 frames
             if image.frame % 30 == 0:
+
                 i = 0
                 # Save the image -- for export
                 # Initialize the exporter
 
                 boxes = []
+                sem_lidar_data = np.frombuffer(sem_pointcloud.raw_data, dtype=np.dtype(
+                    [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('cos', 'f4'), ('index', 'u4'), ('semantic', 'u4')]))
+                points = np.array([sem_lidar_data[:]['index'], sem_lidar_data[:]['semantic']])
+                mask = np.array([sem_lidar_data[:]['index'], sem_lidar_data[:]['semantic']])[:][1] == 10
+                semantic_list = np.unique(points[0][mask])
                 for npc in world.get_actors():
                     # Filter out the ego vehicle
-                    if npc.id != ego.id and npc.id in vehicles_list:
+                    if npc.id != ego.id and npc.id in vehicles_list and npc.id in semantic_list:
                         bb = npc.bounding_box
                         dist = npc.get_transform().location.distance(ego.get_transform().location)
 
@@ -399,7 +418,7 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                 labels = []
                 for npc in world.get_actors():
                     # Filter out the ego vehicle
-                    if npc.id != ego.id and npc.id in vehicles_list:
+                    if npc.id != ego.id and npc.id in vehicles_list and npc.id in semantic_list:
                         transform = npc.get_transform()
                         if lidar_location.distance(transform.location) < 50:
                             # Get the bounding box of the vehicle
@@ -491,11 +510,11 @@ if __name__ == "__main__":
     frames = 20000
     num_vehicle = 75
     num_pedestrian = 30
+    main('Town04', num_vehicle, num_pedestrian, frames)
     main('Town10HD', num_vehicle, num_pedestrian, frames)
     main('Town01', num_vehicle, num_pedestrian, frames)
     main('Town02', num_vehicle, num_pedestrian, frames)
     main('Town03', num_vehicle, num_pedestrian, frames)
-    main('Town04', num_vehicle, num_pedestrian, frames)
     main('Town05', num_vehicle, num_pedestrian, frames)
 
 
