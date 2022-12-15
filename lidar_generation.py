@@ -236,7 +236,7 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
     # Reshape the raw data into an RGB array
     img = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
     # Reshape pointcloud data
-    lidar_data = np.frombuffer(pointcloud.raw_data, dtype=np.dtype('f4'))
+    #lidar_data = np.frombuffer(pointcloud.raw_data, dtype=np.dtype('f4'))
 
     # Display the image in an OpenCV display window
     cv2.namedWindow('CARLA RaceAI', cv2.WINDOW_AUTOSIZE)
@@ -305,7 +305,11 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                                 elif name == 'sprinter' or name == 'carlacola':
                                     classification = 'van'
                                     # Add the object to the frame (ensure it is inside the image)
-                                if x_min >= 0 and x_max <= image_w and y_min >= 0 and y_max <= image_h:
+                                x_min = np.clip(x_min, 0, image_w)
+                                x_max = np.clip(x_max, 0, image_w)
+                                y_min = np.clip(y_min, 0, image_h)
+                                y_max = np.clip(y_max, 0, image_h)
+                                if x_min != x_max and y_min != y_max:
                                     boxes.append([x_min, y_min, x_max, y_max, classification])
             i += 1
             if i == 3:
@@ -424,7 +428,7 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
 
 
                             labels.append({
-                                'type': classification,
+                                'type': "DontCare",
                                 'truncated': 0,
                                 'occluded': 0,
                                 'alpha': 0,
@@ -458,7 +462,7 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                 lidar_path = 'output/lidar_output/' + town + '/ply/' + '%06d' % pointcloud.frame + '.ply'
                 pointcloud.save_to_disk(lidar_path)
                 # flip the pointcloud y axis
-
+                """
                 plydata = plyfile.PlyData.read(lidar_path)
                 lidar = np.vstack([plydata['vertex']['x'], plydata['vertex']['y'], plydata['vertex']['z'],
                                    plydata['vertex']['I']]).transpose()
@@ -466,6 +470,7 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                 lidar[:, 1] *= -1
                 # save to bin file with intensity as color
                 lidar.tofile('output/lidar_output/' + town + '/data/' + '%06d' % pointcloud.frame + '.bin')
+                """
                 if cv2.waitKey(1) == ord('q'):
                     break
     finally:
