@@ -124,6 +124,11 @@ def get_matrix(transform):
     matrix[2, 2] = c_p * c_r
     return matrix
 
+def applyTransform(transform, location):
+    transform = np.array(transform)
+    location = np.array([location.x, location.y, location.z ,1])
+    location = location.dot(transform.T)
+    return carla.Location(location[0],location[1], location[2])
 
 ### Get numpy 2D array of vehicles' location and rotation from world reference, also locations from sensor reference
 def get_list_transform(vehicles_list, sensor):
@@ -418,6 +423,7 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                                                 carla.Rotation(-lidar_transform.rotation.pitch, -lidar_transform.rotation.yaw,
                                                                -lidar_transform.rotation.roll))
                 labels = []
+                inv_transform = lidar_transform.get_inverse_matrix()
                 for npc in world.get_actors():
                     # Filter out the ego vehicle
                     if npc.id != ego.id and npc.id in vehicles_list and npc.id in semantic_list:
@@ -432,10 +438,9 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                             # get the location of the vehicle
                             location = bounding_box.location
 
-                            point = inv_transform.transform(transform.location - lidar_location)
 
 
-
+                            location = applyTransform(inv_transform, location)
                             # get type of the vehicle
                             name = npc.type_id.split('.')[2]
                             classification = 'car'
@@ -448,7 +453,7 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                             elif name == 'sprinter' or name == 'carlacola':
                                 classification = 'van'
                             labels.append({
-                                'type': "DontCare",
+                                'type': "Car",
                                 'truncated': 0,
                                 'occluded': 0,
                                 'alpha': 0,
@@ -459,10 +464,10 @@ def main(town, num_of_vehicles, num_of_walkers, num_of_frames):
                                 'height': round(corners.z * 2, 2),
                                 'width': round(corners.y * 2, 2),
                                 'length': round(corners.x * 2, 2),
-                                'x': round(location.x + point.x, 2),
-                                'y': round(location.y + point.y, 2),
-                                'z': round(location.z + point.z, 2),
-                                'yaw': np.radians(rotation.yaw - lidar_transform.rotation.yaw),
+                                'x': round(location.x, 2),
+                                'y': -round(location.y, 2),
+                                'z': round(location.z, 2),
+                                'yaw': -np.radians(rotation.yaw - lidar_transform.rotation.yaw),
 
                             })
                 #make directory for the pointclouds
